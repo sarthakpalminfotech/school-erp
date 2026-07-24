@@ -1,0 +1,41 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 152 30% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 152 30% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 152 30% 12%;
+    --primary: 151 42% 16%;
+    --primary-foreground: 90 70% 93%;
+    --secondary: 92 54% 91%;
+    --secondary-foreground: 151 42% 16%;
+    --muted: 210 17% 95%;
+    --muted-foreground: 215 14% 43%;
+    --accent: 92 54% 91%;
+    --accent-foreground: 151 42% 16%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 18% 90%;
+    --input: 214 18% 90%;
+    --ring: 151 42% 28%;
+    --radius: .8rem;
+    --sidebar-background: 151 31% 12%;
+    --sidebar-foreground: 150 15% 82%;
+    --sidebar-primary: 84 67% 66%;
+    --sidebar-primary-foreground: 151 31% 12%;
+    --sidebar-accent: 151 20% 20%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 151 18% 25%;
+    --sidebar-ring: 84 67% 66%;
+  }
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground font-sans antialiased; }
+  button, input, select, textarea { font: inherit; }
+}
