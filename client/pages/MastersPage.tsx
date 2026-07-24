@@ -821,11 +821,11 @@ export const MastersPage: React.FC = () => {
                             </div>
                           </div>
                           <span className={`text-[11px] font-bold border px-2 py-0.5 rounded-full ${
-                            order.status === "Commissioned/Completed"
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-250"
-                              : order.status === "In Process"
-                              ? "bg-sky-50 text-sky-700 border-sky-200"
-                              : "bg-slate-50 text-slate-750 border-slate-205"
+                              order.status === "Commissioned/Completed"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-250"
+                                : order.status === "Payment Pending"
+                                ? "bg-sky-50 text-sky-700 border-sky-200"
+                                : "bg-slate-50 text-slate-750 border-slate-205"
                           }`}>
                             {order.status}
                           </span>

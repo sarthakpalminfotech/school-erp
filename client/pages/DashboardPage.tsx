@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import {
   TrendingUp, Users, ClipboardList, Wrench, ShieldAlert, CreditCard,
-  AlertTriangle, CheckCircle, Bell, ArrowRight, UserPlus, Phone, MapPin, Play, Clock
+  AlertTriangle, CheckCircle, Bell, ArrowRight, UserPlus, Phone, MapPin, Play, Clock, ArrowUpDown
 } from "lucide-react";
 import { useAppState, Lead, Order, Complaint, Part } from "@/hooks/useAppState";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { useNavigate } from "react-router-dom";
 export const DashboardPage: React.FC = () => {
   const {
     currentUserRole, currentSimulatedUser, leads, orders, complaints, inventory, payments,
-    timelineLogs, addLead, employees, cities, serviceCycles
+    timelineLogs, addLead, employees, cities, serviceCycles, dismissOrderAlert
   } = useAppState();
 
   const navigate = useNavigate();
@@ -19,6 +19,10 @@ export const DashboardPage: React.FC = () => {
   const [salesDateFilter, setSalesDateFilter] = useState("Month"); // Today, Week, Month, Year
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
+
+  // --- Assigned tickets View All & Sorting states ---
+  const [showAllTickets, setShowAllTickets] = useState(false);
+  const [ticketSort, setTicketSort] = useState<"default" | "date-early">("default");
 
   // --- Quick Intake for Receptionist ---
   const [rcCompany, setRcCompany] = useState("");
@@ -98,9 +102,10 @@ export const DashboardPage: React.FC = () => {
       orderId: string;
       companyName: string;
       city: string;
-      type: "Commissioning" | "Check-up" | "Main Service" | "Complaint";
+      type: "Order Delivery" | "Commissioning" | "Check-up" | "Main Service" | "Complaint";
       status: string;
       details?: string;
+      date?: string;
     }[] = [];
 
     const getDaysDiff = (dateStr?: string) => {
@@ -111,10 +116,25 @@ export const DashboardPage: React.FC = () => {
 
     // Process orders for Commissioning, Check-up, and Main Service
     orders.forEach(order => {
-      // 1. Commissioning: when assigned as delivery partner
+      // 1. Order Delivery: when assigned as delivery partner
       if (order.deliveryPartner === currentSimulatedUser) {
-        // Service engineer dashboard: only show if status is Commissioning Pending
-        if (currentUserRole !== "Service Engineer" || order.status === "Commissioning Pending") {
+        if (currentUserRole !== "Service Engineer" || order.status === "Order Placed with Supplier" || order.status === "Commissioning Pending") {
+          tickets.push({
+            id: `DEL-${order.id}`,
+            orderId: order.id,
+            companyName: order.companyName,
+            city: order.city,
+            type: "Order Delivery",
+            status: order.status === "Commissioned/Completed" ? "Completed" : "Pending",
+            details: "Assigned as Delivery Partner for order shipment",
+            date: order.deliveryDate
+          });
+        }
+      }
+
+      // 2. Commissioning: when assigned as service engineer (assignedEngineer)
+      if (order.assignedEngineer === currentSimulatedUser) {
+        if (currentUserRole !== "Service Engineer" || order.status === "Commissioning Pending" || order.status === "Commissioned/Completed") {
           tickets.push({
             id: `COMM-${order.id}`,
             orderId: order.id,
@@ -122,18 +142,16 @@ export const DashboardPage: React.FC = () => {
             city: order.city,
             type: "Commissioning",
             status: order.status === "Commissioned/Completed" ? "Completed" : "Pending",
-            details: "Commissioning via Delivery Assignment"
+            details: "Scheduled commissioning task",
+            date: order.deliveryDate
           });
         }
-      }
 
-      // 2. Check-up & Main Service: when assigned as service engineer
-      if (order.assignedEngineer === currentSimulatedUser) {
+        // 3. Check-up & Main Service: when assigned as service engineer
         const sc = serviceCycles.find(c => c.orderId === order.id);
         if (sc) {
           const checkupDays = getDaysDiff(sc.nextCheckupDate);
-          // Show check-up ticket only if due date is within 10 days for Service Engineer
-          if (currentUserRole !== "Service Engineer" || checkupDays <= 10) {
+          if (showAllTickets || checkupDays <= 10) {
             tickets.push({
               id: `CHK-${order.id}`,
               orderId: order.id,
@@ -141,13 +159,13 @@ export const DashboardPage: React.FC = () => {
               city: order.city,
               type: "Check-up",
               status: sc.nextCheckupDate ? `Due: ${sc.nextCheckupDate}` : "Scheduled",
-              details: "Standard 45-day Checkup track"
+              details: "Standard 45-day Checkup track",
+              date: sc.nextCheckupDate
             });
           }
           if (sc.nextMajorServiceDate) {
             const majorDays = getDaysDiff(sc.nextMajorServiceDate);
-            // Show major service ticket only if due date is within 10 days for Service Engineer
-            if (currentUserRole !== "Service Engineer" || majorDays <= 10) {
+            if (showAllTickets || majorDays <= 10) {
               tickets.push({
                 id: `MAJ-${order.id}`,
                 orderId: order.id,
@@ -155,7 +173,8 @@ export const DashboardPage: React.FC = () => {
                 city: order.city,
                 type: "Main Service",
                 status: `Due: ${sc.nextMajorServiceDate}`,
-                details: "2000-hour Major Service maintenance track"
+                details: "2000-hour Major Service maintenance track",
+                date: sc.nextMajorServiceDate
               });
             }
           }
@@ -163,7 +182,7 @@ export const DashboardPage: React.FC = () => {
       }
     });
 
-    // 3. Complaint: when assigned as service engineer for an active complaint
+    // 4. Complaint: when assigned as service engineer for an active complaint
     complaints.forEach(comp => {
       if (comp.assignedEngineer === currentSimulatedUser && comp.status !== "Resolved/Closed") {
         tickets.push({
@@ -173,13 +192,22 @@ export const DashboardPage: React.FC = () => {
           city: comp.city,
           type: "Complaint",
           status: comp.status,
-          details: comp.issue
+          details: comp.issue,
+          date: comp.createdAt
         });
       }
     });
 
+    if (ticketSort === "date-early") {
+      tickets.sort((a, b) => {
+        const timeA = a.date ? new Date(a.date).getTime() : 9999999999999;
+        const timeB = b.date ? new Date(b.date).getTime() : 9999999999999;
+        return timeA - timeB;
+      });
+    }
+
     return tickets;
-  }, [orders, complaints, serviceCycles, currentSimulatedUser, currentUserRole]);
+  }, [orders, complaints, serviceCycles, currentSimulatedUser, currentUserRole, showAllTickets, ticketSort]);
 
   const [rcBranch, setRcBranch] = useState("");
 
@@ -541,12 +569,76 @@ export const DashboardPage: React.FC = () => {
       {/* -------------------- SERVICE ENGINEER / ASSIGNED SERVICE TICKETS VIEW -------------------- */}
       {(currentUserRole === "Service Engineer" || myServiceTickets.length > 0) && currentUserRole !== "Owner" && (
         <div className="space-y-6 animate-fadeIn">
+          {currentUserRole === "Service Engineer" && orders.some(o => (o.assignedEngineer === currentSimulatedUser || o.deliveryPartner === currentSimulatedUser) && o.engineerAssignAlert) && (
+            <div className="space-y-3">
+              {orders.filter(o => (o.assignedEngineer === currentSimulatedUser || o.deliveryPartner === currentSimulatedUser) && o.engineerAssignAlert).map(o => {
+                const isCommissioning = o.assignedEngineer === currentSimulatedUser;
+                const visitType = isCommissioning ? "Commissioning" : "Order Delivery";
+                return (
+                  <div 
+                    key={o.id} 
+                    className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-sm"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-emerald-600 animate-ping" />
+                        <strong className="text-emerald-800 text-sm">New Assignment: {visitType}</strong>
+                      </div>
+                      <p className="text-xs text-slate-650 mt-1">
+                        You have been assigned to <span className="font-semibold text-slate-900">{o.companyName}</span> ({o.city}) for {visitType.toLowerCase()}.
+                        {o.deliveryDate && ` Scheduled: ${new Date(o.deliveryDate).toLocaleString()}`}
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={() => dismissOrderAlert(o.id, 'engineer_assign')}
+                      className="bg-emerald-800 hover:bg-emerald-900 text-white text-xs px-3 py-1.5 rounded-xl shrink-0"
+                    >
+                      Acknowledge Task
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {/* Active Job Cards */}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-            <h3 className="font-display font-bold text-slate-900 border-b pb-3 flex items-center gap-2">
-              <Wrench size={16} className="text-[#173c2d]" />
-              <span>My Assigned Service Tickets & Visits</span>
-            </h3>
+            <div className="border-b pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <h3 className="font-display font-bold text-slate-900 flex items-center gap-2">
+                <Wrench size={16} className="text-[#173c2d]" />
+                <span>My Assigned Service Tickets & Visits</span>
+              </h3>
+              
+              <div className="flex items-center gap-2">
+                {/* View All Toggle */}
+                <button
+                  onClick={() => setShowAllTickets(!showAllTickets)}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition ${
+                    showAllTickets 
+                      ? "bg-[#173c2d] text-white border-[#173c2d]" 
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  {showAllTickets ? "Showing All" : "View All"}
+                </button>
+
+                {/* Sort Toggle */}
+                <button
+                  onClick={() => setTicketSort(ticketSort === "default" ? "date-early" : "default")}
+                  className={`p-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition ${
+                    ticketSort === "date-early"
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-300 animate-pulse"
+                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                  }`}
+                  title="Sort: Date Early First"
+                >
+                  <ArrowUpDown size={14} />
+                  <span>Sort Date Early First</span>
+                  {ticketSort === "date-early" && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                  )}
+                </button>
+              </div>
+            </div>
 
             {myServiceTickets.length === 0 ? (
               <p className="text-xs text-slate-400 italic text-center py-8 bg-slate-50 border rounded-xl">
@@ -566,6 +658,8 @@ export const DashboardPage: React.FC = () => {
                         <span className={`font-semibold px-2 py-0.5 rounded border text-[10px] ${
                           ticket.type === "Commissioning" 
                             ? "bg-sky-50 text-sky-700 border-sky-100" 
+                            : ticket.type === "Order Delivery"
+                            ? "bg-amber-50 text-amber-700 border-amber-100"
                             : ticket.type === "Check-up"
                             ? "bg-emerald-50 text-emerald-700 border-emerald-100"
                             : ticket.type === "Main Service"
@@ -575,6 +669,11 @@ export const DashboardPage: React.FC = () => {
                       </div>
                       <h4 className="font-bold text-slate-900 text-sm">{ticket.companyName}</h4>
                       <p className="text-xs text-slate-500 flex items-center gap-1"><MapPin size={11} /> {ticket.city}</p>
+                      {ticket.date && (
+                        <p className="text-[10px] text-slate-450 mt-1 flex items-center gap-1 font-semibold text-slate-500">
+                          <Clock size={10} /> Scheduled: {new Date(ticket.date).toLocaleString()}
+                        </p>
+                      )}
                     </div>
                     {ticket.details && (
                       <p className="text-[11px] text-slate-650 bg-white border p-2 rounded italic text-slate-600 line-clamp-3">
@@ -585,11 +684,6 @@ export const DashboardPage: React.FC = () => {
                 ))}
               </div>
             )}
-
-            <Button onClick={() => navigate("/orders")} variant="ghost" className="w-full text-xs font-bold text-slate-700 flex items-center justify-between">
-              <span>View All My Assigned Orders</span>
-              <ArrowRight size={14} />
-            </Button>
           </div>
         </div>
       )}

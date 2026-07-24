@@ -11,7 +11,7 @@ export const OrdersPage: React.FC = () => {
     orders, updateOrderStatus, uploadQuotation, toggleQuotationApproval,
     deleteQuotation, addNoteToOrder, logComplaint, payments, addPayment,
     togglePaymentComplete, timelineLogs, customers, addOrder, employees,
-    currentUserRole, currentSimulatedUser, cities, products, updateOrderValue, updateOrderDetails,
+    currentUserRole, currentSimulatedUser, cities, products, updateOrderValue, updateOrderDetails, dismissOrderAlert,
     suppliers, hasWritePermission, serviceCycles, uploadServiceReport, deleteServiceReport
   } = useAppState();
 
@@ -88,6 +88,10 @@ export const OrdersPage: React.FC = () => {
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
   const [selectedSupplierId, setSelectedSupplierId] = useState("");
   const [selectedDeliveryPartner, setSelectedDeliveryPartner] = useState("");
+  const [deliveryDateTime, setDeliveryDateTime] = useState("");
+  const [commissioningScheduleDateTime, setCommissioningScheduleDateTime] = useState("");
+  const [isRescheduleOpen, setIsRescheduleOpen] = useState(false);
+  const [rescheduleDateTime, setRescheduleDateTime] = useState("");
 
   // Edit details modal state (For Owner)
   const [isEditDetailsOpen, setIsEditDetailsOpen] = useState(false);
@@ -194,7 +198,7 @@ export const OrdersPage: React.FC = () => {
       salesperson: formSales || (currentUserRole === "Sales Person" ? currentSimulatedUser : (employees.filter(e => e.role === "Sales Person" || e.role === "Owner")[0]?.name || "")),
       city: formCity,
       branch: formBranch,
-      status: "In Process",
+      status: "Payment Pending",
       productsSelected: dbProductsSelected,
       orderValue: orderValue,
       gstNumber: formGstNumber
@@ -234,13 +238,27 @@ export const OrdersPage: React.FC = () => {
     setIsEditDetailsOpen(true);
   };
 
-  const handleAddPaymentSubmit = (e: React.FormEvent) => {
+  const handleAddPaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrderId || !payAmount) return;
 
-    addPayment(selectedOrderId, Number(payAmount), payNote || "Partial Payment");
+    const amt = Number(payAmount);
+    await addPayment(selectedOrderId, amt, payNote || "Partial Payment");
     setPayAmount("");
     setPayNote("");
+
+    // Calculate if balance reaches 0
+    const currentTotal = activeLedger?.entries.reduce((sum, entry) => sum + entry.amount, 0) || 0;
+    const totalWithNew = currentTotal + amt;
+    const orderValue = activeOrder?.orderValue || 0;
+    const newBalance = Math.max(0, orderValue - totalWithNew);
+
+    if (activeOrder && activeOrder.status === "Payment Pending") {
+      setSelectedSupplierId(activeOrder.supplierId || "");
+      setSelectedDeliveryPartner(activeOrder.deliveryPartner || "");
+      setDeliveryDateTime("");
+      setIsSupplierModalOpen(true);
+    }
   };
 
   const handleComplaintSubmit = (e: React.FormEvent) => {
@@ -260,7 +278,6 @@ export const OrdersPage: React.FC = () => {
 
   const getStatusColor = (status: Order["status"]) => {
     switch (status) {
-      case "In Process": return "bg-sky-100 text-sky-800 border-sky-200";
       case "Payment Pending": return "bg-violet-100 text-violet-800 border-violet-200";
       case "Order Placed with Supplier": return "bg-indigo-100 text-indigo-800 border-indigo-200";
       case "Commissioning Pending": return "bg-amber-100 text-amber-800 border-amber-200";
@@ -284,7 +301,7 @@ export const OrdersPage: React.FC = () => {
           </button>
           <div className="flex items-center gap-2">
             {/* Status Change Dropdown */}
-            {canWrite && (
+            {(canWrite || currentUserRole === "Service Engineer") && (
               <div className="shrink-0">
                 <select
                   value={activeOrder.status}
@@ -296,7 +313,9 @@ export const OrdersPage: React.FC = () => {
                     }
                     if (newStatus === "Commissioning Pending") {
                       if (currentUserRole === "Service Engineer") {
-                        updateOrderStatus(activeOrder.id, "Commissioning Pending");
+                        if (confirm("Are you sure you want to transition this order status to Commissioning Pending?")) {
+                          updateOrderStatus(activeOrder.id, "Commissioning Pending");
+                        }
                       } else {
                         setIsAssignOpen(true);
                       }
@@ -320,7 +339,6 @@ export const OrdersPage: React.FC = () => {
                     </>
                   ) : (
                     <>
-                      <option value="In Process">In Process</option>
                       <option value="Payment Pending">Payment Pending</option>
                       <option value="Order Placed with Supplier">Order Placed with Supplier</option>
                       <option value="Commissioning Pending">Commissioning Pending</option>
@@ -353,10 +371,10 @@ export const OrdersPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Action Alerts for Owner */}
-        {currentUserRole === "Owner" && (
+        {/* Action Alerts */}
+        {(currentUserRole === "Owner" || currentUserRole === "Service Engineer") && (
           <div className="flex flex-col gap-2.5">
-            {activeOrder.status === "Order Placed with Supplier" && !activeOrder.deliveryPartner && (
+            {currentUserRole === "Owner" && activeOrder.status === "Order Placed with Supplier" && !activeOrder.deliveryPartner && (
               <div 
                 onClick={openEditDetails}
                 className="bg-amber-50 border border-amber-200 p-3.5 rounded-xl flex gap-2.5 text-xs font-medium cursor-pointer"
@@ -369,16 +387,62 @@ export const OrdersPage: React.FC = () => {
               </div>
             )}
             
-            {activeOrder.status === "Commissioning Pending" && !activeOrder.assignedEngineer && (
+            {currentUserRole === "Owner" && activeOrder.status === "Commissioning Pending" && !activeOrder.assignedEngineer && (
               <div 
-                onClick={openEditDetails}
-                className="bg-amber-50 border border-amber-200 p-3.5 rounded-xl flex gap-2.5 text-xs font-medium cursor-pointer"
+                onClick={() => {
+                  setSelectedEngineer("");
+                  setCommissioningScheduleDateTime("");
+                  setIsAssignOpen(true);
+                }}
+                className="bg-amber-50 border border-amber-205 p-3.5 rounded-xl flex gap-2.5 text-xs font-medium cursor-pointer hover:bg-amber-100/50 transition shadow-sm"
               >
-                <AlertTriangle size={16} className="text-amber-600 mt-0.5 shrink-0" />
+                <AlertTriangle size={16} className="text-amber-600 mt-0.5 shrink-0 animate-pulse" />
                 <div>
-                  <strong className="text-amber-800">Action Required: Service Engineer Missing</strong>
-                  <p className="text-slate-600 mt-0.5">Please assign a service engineer in Edit Order Details.</p>
+                  <strong className="text-amber-800">Action Required: Schedule Commissioning & Assign Service Engineer</strong>
+                  <p className="text-slate-600 mt-0.5">Please click here to assign a service engineer and schedule the commissioning date & time.</p>
                 </div>
+              </div>
+            )}
+
+            {currentUserRole === "Owner" && activeOrder.ownerRescheduleAlert && (
+              <div 
+                className="bg-rose-50 border border-rose-200 p-3.5 rounded-xl flex justify-between items-center gap-2.5 text-xs font-medium"
+              >
+                <div className="flex gap-2.5">
+                  <AlertTriangle size={16} className="text-rose-600 mt-0.5 shrink-0 animate-bounce" />
+                  <div>
+                    <strong className="text-rose-800">Reschedule Alert: Appointment Changed by Engineer</strong>
+                    <p className="text-slate-600 mt-0.5">The Service Engineer rescheduled this appointment to: {activeOrder.deliveryDate ? new Date(activeOrder.deliveryDate).toLocaleString() : "N/A"}</p>
+                  </div>
+                </div>
+                <Button 
+                  onClick={() => dismissOrderAlert(activeOrder.id, 'owner_reschedule')}
+                  variant="ghost" 
+                  className="text-rose-700 hover:bg-rose-100 text-xs px-2.5 py-1.5 rounded-lg shrink-0"
+                >
+                  Acknowledge
+                </Button>
+              </div>
+            )}
+
+            {currentUserRole === "Service Engineer" && activeOrder.engineerRescheduleAlert && (
+              <div 
+                className="bg-rose-50 border border-rose-200 p-3.5 rounded-xl flex justify-between items-center gap-2.5 text-xs font-medium"
+              >
+                <div className="flex gap-2.5">
+                  <AlertTriangle size={16} className="text-rose-600 mt-0.5 shrink-0 animate-bounce" />
+                  <div>
+                    <strong className="text-rose-800">Reschedule Alert: Appointment Changed by Owner</strong>
+                    <p className="text-slate-600 mt-0.5">The Owner rescheduled this appointment to: {activeOrder.deliveryDate ? new Date(activeOrder.deliveryDate).toLocaleString() : "N/A"}</p>
+                  </div>
+                </div>
+                <Button 
+                  onClick={() => dismissOrderAlert(activeOrder.id, 'engineer_reschedule')}
+                  variant="ghost" 
+                  className="text-rose-700 hover:bg-rose-100 text-xs px-2.5 py-1.5 rounded-lg shrink-0"
+                >
+                  Acknowledge
+                </Button>
               </div>
             )}
           </div>
@@ -419,12 +483,32 @@ export const OrdersPage: React.FC = () => {
                 <p className="mt-0.5 text-slate-800">{activeOrder.assignedEngineer}</p>
               </div>
             )}
-            {activeOrder.supplierId && (
+             {activeOrder.supplierId && (
               <div>
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Supplier</p>
                 <p className="mt-0.5 text-slate-800">
                   {suppliers.find(s => s.id === activeOrder.supplierId)?.name || activeOrder.supplierId}
                 </p>
+              </div>
+            )}
+            {activeOrder.deliveryDate && (
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Scheduled Date & Time</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <p className="text-slate-805 font-medium">{new Date(activeOrder.deliveryDate).toLocaleString()}</p>
+                  {(currentUserRole === "Owner" || currentUserRole === "Service Engineer") && (
+                    <button
+                      onClick={() => {
+                        setRescheduleDateTime(activeOrder.deliveryDate ? activeOrder.deliveryDate.substring(0, 16) : "");
+                        setIsRescheduleOpen(true);
+                      }}
+                      className="p-1 rounded hover:bg-slate-100 text-[#5b8d65] hover:text-[#4a7251] transition"
+                      title="Reschedule Appointment"
+                    >
+                      <Calendar size={14} />
+                    </button>
+                  )}
+                </div>
               </div>
             )}
             {activeOrder.deliveryPartner && (
@@ -819,7 +903,7 @@ export const OrdersPage: React.FC = () => {
 
               <div className="p-5 space-y-4">
                 <p className="text-sm text-slate-600">Assign an engineer to commission the compressor at <strong className="text-emerald-700">{activeOrder.city}</strong>.</p>
-                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                <div className="space-y-2 max-h-[220px] overflow-y-auto pr-2">
                   {employees
                     .filter(emp => emp.role === "Service Engineer")
                     .sort((a, b) => {
@@ -851,6 +935,17 @@ export const OrdersPage: React.FC = () => {
                       </div>
                     ))}
                 </div>
+
+                <label className="text-xs font-semibold text-slate-700 flex flex-col gap-1.5 pt-2">
+                  Schedule Date & Time <span className="text-rose-500">*</span>
+                  <input
+                    type="datetime-local"
+                    value={commissioningScheduleDateTime}
+                    onChange={e => setCommissioningScheduleDateTime(e.target.value)}
+                    className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-[#5b8d65]"
+                    required
+                  />
+                </label>
               </div>
 
               <div className="flex justify-end gap-2 border-t p-4 bg-slate-50">
@@ -858,14 +953,18 @@ export const OrdersPage: React.FC = () => {
                   Cancel
                 </Button>
                 <Button 
-                  onClick={() => {
-                    if (selectedEngineer) {
-                      updateOrderStatus(activeOrder.id, "Commissioning Pending", selectedEngineer);
+                  onClick={async () => {
+                    if (selectedEngineer && commissioningScheduleDateTime) {
+                      await updateOrderDetails(activeOrder.id, {
+                        assignedEngineer: selectedEngineer,
+                        deliveryDate: commissioningScheduleDateTime
+                      });
                       setIsAssignOpen(false);
                       setSelectedEngineer("");
+                      setCommissioningScheduleDateTime("");
                     }
                   }} 
-                  disabled={!selectedEngineer}
+                  disabled={!selectedEngineer || !commissioningScheduleDateTime}
                   className="bg-[#173c2d] hover:bg-[#204a3b] text-white text-xs rounded-lg px-4 disabled:opacity-50"
                 >
                   Confirm Assignment
@@ -880,11 +979,19 @@ export const OrdersPage: React.FC = () => {
           <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4 backdrop-blur-sm">
             <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl animate-scaleUp">
               <div className="border-b p-5 flex items-center justify-between">
-                <h3 className="font-display text-lg font-bold text-slate-900">Select Supplier & Delivery Partner</h3>
+                <h3 className="font-display text-lg font-bold text-slate-900">
+                  {activeOrder.status === "Payment Pending" ? "Place Order with Supplier" : "Select Supplier & Delivery Partner"}
+                </h3>
                 <button onClick={() => setIsSupplierModalOpen(false)} className="rounded-lg p-1.5 hover:bg-slate-100 transition"><X size={16} /></button>
               </div>
 
               <div className="p-5 space-y-4">
+                {activeOrder.status === "Payment Pending" && (
+                  <div className="bg-emerald-50 border border-emerald-250 text-emerald-800 p-3.5 rounded-xl text-xs font-bold text-center">
+                    Place order with supplier
+                  </div>
+                )}
+
                 <label className="text-xs font-semibold text-slate-700 flex flex-col gap-1.5">
                   Finished Goods Supplier <span className="text-rose-500">*</span>
                   <select
@@ -917,6 +1024,16 @@ export const OrdersPage: React.FC = () => {
                     })}
                   </select>
                 </label>
+
+                <label className="text-xs font-semibold text-slate-700 flex flex-col gap-1.5">
+                  Delivery Date & Time (Optional)
+                  <input
+                    type="datetime-local"
+                    value={deliveryDateTime}
+                    onChange={e => setDeliveryDateTime(e.target.value)}
+                    className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-[#5b8d65]"
+                  />
+                </label>
               </div>
 
               <div className="flex justify-end gap-2 border-t p-4 bg-slate-50">
@@ -929,7 +1046,8 @@ export const OrdersPage: React.FC = () => {
                       await updateOrderDetails(activeOrder.id, {
                         status: "Order Placed with Supplier",
                         supplierId: selectedSupplierId,
-                        deliveryPartner: selectedDeliveryPartner || null
+                        deliveryPartner: selectedDeliveryPartner || null,
+                        deliveryDate: deliveryDateTime || null
                       });
                       setIsSupplierModalOpen(false);
                     } else {
@@ -939,6 +1057,52 @@ export const OrdersPage: React.FC = () => {
                   className="bg-[#173c2d] hover:bg-[#204a3b] text-white text-xs rounded-lg px-4"
                 >
                   Confirm Supplier Placement
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reschedule Appointment Modal */}
+        {isRescheduleOpen && activeOrder && (
+          <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl animate-scaleUp">
+              <div className="border-b p-5 flex items-center justify-between">
+                <h3 className="font-display text-lg font-bold text-slate-900">Reschedule Appointment</h3>
+                <button onClick={() => setIsRescheduleOpen(false)} className="rounded-lg p-1.5 hover:bg-slate-100 transition"><X size={16} /></button>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <label className="text-xs font-semibold text-slate-700 flex flex-col gap-1.5">
+                  New Date & Time <span className="text-rose-500">*</span>
+                  <input
+                    type="datetime-local"
+                    value={rescheduleDateTime}
+                    onChange={e => setRescheduleDateTime(e.target.value)}
+                    className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-[#5b8d65]"
+                    required
+                  />
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 border-t p-4 bg-slate-50">
+                <Button type="button" onClick={() => setIsRescheduleOpen(false)} variant="ghost" className="text-slate-650 text-xs rounded-lg">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={async () => {
+                    if (rescheduleDateTime) {
+                      await updateOrderDetails(activeOrder.id, {
+                        deliveryDate: rescheduleDateTime
+                      });
+                      setIsRescheduleOpen(false);
+                      setRescheduleDateTime("");
+                    }
+                  }}
+                  disabled={!rescheduleDateTime}
+                  className="bg-[#173c2d] hover:bg-[#204a3b] text-white text-xs rounded-lg px-4"
+                >
+                  Confirm Reschedule
                 </Button>
               </div>
             </div>
@@ -1151,90 +1315,101 @@ export const OrdersPage: React.FC = () => {
                 No orders found matching current search filters.
               </div>
             ) : (
-              filteredOrders.map(order => (
-                <div
-                  key={order.id}
-                  onClick={() => setSelectedOrderId(order.id)}
-                  className="bg-white border border-slate-200/80 p-4 rounded-xl shadow-sm hover:shadow-md hover:bg-slate-55/20 transition-all cursor-pointer space-y-3"
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-[#173c2d] text-sm">{order.id}</span>
-                      {currentUserRole === "Owner" && (
-                        (order.status === "Order Placed with Supplier" && !order.deliveryPartner) ||
-                        (order.status === "Commissioning Pending" && !order.assignedEngineer)
-                      ) && (
-                        <span title="Action Required: Missing Assignment"><AlertTriangle size={14} className="text-amber-500" /></span>
-                      )}
-                    </div>
-                    <div onClick={e => e.stopPropagation()}>
-                      {canWrite ? (
-                        <select
-                          value={order.status}
-                          onClick={e => e.stopPropagation()}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            const newStatus = e.target.value as Order["status"];
-                            if (newStatus === "Commissioned/Completed" && !order.gstNumber) {
-                              alert("GST Number is compulsory before Commissioning. Open details page to verify.");
-                              return;
-                            }
-                            if (newStatus === "Commissioning Pending") {
-                              if (currentUserRole === "Service Engineer") {
-                                updateOrderStatus(order.id, "Commissioning Pending");
-                              } else {
-                                setSelectedOrderId(order.id);
-                                setIsAssignOpen(true);
-                              }
-                            } else if (newStatus === "Order Placed with Supplier") {
-                              setSelectedOrderId(order.id);
-                              setSelectedSupplierId(order.supplierId || "");
-                              setSelectedDeliveryPartner(order.deliveryPartner || "");
-                              setIsSupplierModalOpen(true);
-                            } else {
-                              updateOrderStatus(order.id, newStatus);
-                            }
-                          }}
-                          className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold cursor-pointer outline-none appearance-none ${getStatusColor(order.status)}`}
-                          style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
-                        >
-                          {currentUserRole === "Service Engineer" ? (
-                            <>
-                              {order.status !== "Commissioning Pending" && order.status !== "Commissioned/Completed" && (
-                                <option value={order.status} disabled>{order.status}</option>
-                              )}
-                              <option value="Commissioning Pending">Commissioning Pending</option>
-                              <option value="Commissioned/Completed">Commissioned/Completed</option>
-                            </>
-                          ) : (
-                            <>
-                              <option value="In Process">In Process</option>
-                              <option value="Payment Pending">Payment Pending</option>
-                              <option value="Order Placed with Supplier">Order Placed with Supplier</option>
-                              <option value="Commissioning Pending">Commissioning Pending</option>
-                              <option value="Commissioned/Completed">Commissioned/Completed</option>
-                            </>
+              filteredOrders.map(order => {
+                const cust = customers.find(c => c.id === order.customerId);
+                const contactPersonName = cust?.contactPerson || "-";
+                return (
+                  <div
+                    key={order.id}
+                    onClick={() => setSelectedOrderId(order.id)}
+                    className="bg-white border border-slate-200/80 p-4 rounded-xl shadow-sm hover:shadow-md hover:bg-slate-55/20 transition-all cursor-pointer space-y-3"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-[#173c2d] text-sm">{order.companyName}</span>
+                          {currentUserRole === "Owner" && (
+                            (order.status === "Order Placed with Supplier" && !order.deliveryPartner) ||
+                            (order.status === "Commissioning Pending" && !order.assignedEngineer)
+                          ) && (
+                            <span title="Action Required: Missing Assignment"><AlertTriangle size={14} className="text-amber-500" /></span>
                           )}
-                        </select>
-                      ) : (
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold border ${getStatusColor(order.status)}`}>
-                          {order.status}
-                        </span>
-                      )}
+                        </div>
+                        <span className="text-[11px] text-slate-500 font-medium">Contact: {contactPersonName}</span>
+                      </div>
+                      <div onClick={e => e.stopPropagation()}>
+                        {(canWrite || currentUserRole === "Service Engineer") ? (
+                          <select
+                            value={order.status}
+                            onClick={e => e.stopPropagation()}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              const newStatus = e.target.value as Order["status"];
+                              if (newStatus === "Commissioned/Completed" && !order.gstNumber) {
+                                alert("GST Number is compulsory before Commissioning. Open details page to verify.");
+                                return;
+                              }
+                              if (newStatus === "Commissioning Pending") {
+                                if (currentUserRole === "Service Engineer") {
+                                  if (confirm("Are you sure you want to transition this order status to Commissioning Pending?")) {
+                                    updateOrderStatus(order.id, "Commissioning Pending");
+                                  }
+                                } else {
+                                  setSelectedOrderId(order.id);
+                                  setIsAssignOpen(true);
+                                }
+                              } else if (newStatus === "Order Placed with Supplier") {
+                                setSelectedOrderId(order.id);
+                                setSelectedSupplierId(order.supplierId || "");
+                                setSelectedDeliveryPartner(order.deliveryPartner || "");
+                                setIsSupplierModalOpen(true);
+                              } else {
+                                updateOrderStatus(order.id, newStatus);
+                              }
+                            }}
+                            className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold cursor-pointer outline-none appearance-none ${getStatusColor(order.status)}`}
+                            style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
+                          >
+                            {currentUserRole === "Service Engineer" ? (
+                              <>
+                                {order.status !== "Commissioning Pending" && order.status !== "Commissioned/Completed" && (
+                                  <option value={order.status} disabled>{order.status}</option>
+                                )}
+                                <option value="Commissioning Pending">Commissioning Pending</option>
+                                <option value="Commissioned/Completed">Commissioned/Completed</option>
+                              </>
+                            ) : (
+                              <>
+                                <option value="Payment Pending">Payment Pending</option>
+                                <option value="Order Placed with Supplier">Order Placed with Supplier</option>
+                                <option value="Commissioning Pending">Commissioning Pending</option>
+                                <option value="Commissioned/Completed">Commissioned/Completed</option>
+                              </>
+                            )}
+                          </select>
+                        ) : (
+                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold border ${getStatusColor(order.status)}`}>
+                            {order.status}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-y-1.5 gap-x-3 text-xs text-slate-500/90 font-medium">
-                    <div className="col-span-2">Company: <span className="text-slate-805 font-bold">{order.companyName}</span></div>
-                    <div>City: <span className="text-slate-800">{order.city || "-"}</span></div>
-                    <div>Salesperson: <span className="text-slate-800">{order.salesperson || "-"}</span></div>
-                    <div className="col-span-2 flex justify-between pt-1 text-[11px] text-slate-500 border-t mt-1">
-                      <span>Value: <strong className="text-slate-800">₹{(order.orderValue || 0).toLocaleString()}</strong></span>
-                      <span>Docs: {order.quotations.length} files</span>
+                    <div className="grid grid-cols-2 gap-y-1.5 gap-x-3 text-xs text-slate-500/90 font-medium">
+                      <div>City: <span className="text-slate-800">{order.city || "-"}</span></div>
+                      {["Commissioning Pending", "Commissioned/Completed"].includes(order.status) ? (
+                        <div>Engineer: <span className="text-slate-800">{order.assignedEngineer || "Pending"}</span></div>
+                      ) : (
+                        <div>Delivery Partner: <span className="text-slate-800">{order.deliveryPartner || "Pending"}</span></div>
+                      )}
+                      <div className="col-span-2 flex justify-between pt-1 text-[11px] text-slate-500 border-t mt-1">
+                        <span>Value: <strong className="text-slate-800">₹{(order.orderValue || 0).toLocaleString()}</strong></span>
+                        <span>Docs: {order.quotations.length} files</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 
@@ -1268,7 +1443,6 @@ export const OrdersPage: React.FC = () => {
                   className="w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none focus:border-[#5b8d65]"
                 >
                   <option value="All">All Statuses</option>
-                  <option value="In Process">In Process</option>
                   <option value="Payment Pending">Payment Pending</option>
                   <option value="Order Placed with Supplier">Order Placed with Supplier</option>
                   <option value="Commissioning Pending">Commissioning Pending</option>

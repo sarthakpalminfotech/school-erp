@@ -64,11 +64,15 @@ export interface Order {
   salesperson: string;
   city: string;
   branch: string;
-  status: "In Process" | "Payment Pending" | "Order Placed with Supplier" | "Commissioning Pending" | "Commissioned/Completed";
+  status: "Payment Pending" | "Order Placed with Supplier" | "Commissioning Pending" | "Commissioned/Completed";
   commissionedDate?: string;
   assignedEngineer?: string;
   supplierId?: string;
   deliveryPartner?: string;
+  deliveryDate?: string;
+  ownerRescheduleAlert?: boolean;
+  engineerRescheduleAlert?: boolean;
+  engineerAssignAlert?: boolean;
   quotations: Quotation[];
   productsSelected?: LeadProduct[];
   orderValue?: number;
@@ -263,7 +267,9 @@ interface AppContextType {
     status?: Order["status"];
     orderValue?: number;
     gstNumber?: string | null;
+    deliveryDate?: string | null;
   }) => Promise<void>;
+  dismissOrderAlert: (orderId: string, alertType: "owner_reschedule" | "engineer_reschedule" | "engineer_assign") => Promise<void>;
   uploadQuotation: (parentId: string, type: Quotation["type"], file: File, isLead?: boolean) => Promise<void>;
   toggleQuotationApproval: (orderId: string, quotationId: string) => Promise<void>;
   deleteQuotation: (orderId: string, quotationId: string) => Promise<void>;
@@ -515,6 +521,10 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             assignedEngineer: o.assigned_engineer || undefined,
             supplierId: o.supplier_id || undefined,
             deliveryPartner: o.delivery_partner || undefined,
+            deliveryDate: o.delivery_date || undefined,
+            ownerRescheduleAlert: !!o.owner_reschedule_alert,
+            engineerRescheduleAlert: !!o.engineer_reschedule_alert,
+            engineerAssignAlert: !!o.engineer_assign_alert,
             quotations: orderQuos,
             productsSelected: o.products_selected || [],
             orderValue: o.order_value ? Number(o.order_value) : 0,
@@ -812,7 +822,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         salesperson: lead.salesperson || null,
         city: lead.city || null,
         branch: lead.branch,
-        status: "In Process",
+        status: "Payment Pending",
         products_selected: lead.productsSelected || [],
         order_value: orderValue,
         gst_number: lead.gstNumber || null,
@@ -913,7 +923,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       salesperson: orderData.salesperson,
       city: orderData.city,
       branch: orderData.branch,
-      status: "In Process",
+      status: "Payment Pending",
       products_selected: orderData.productsSelected || [],
       order_value: orderData.orderValue || 0,
       gst_number: orderData.gstNumber || null,
@@ -962,6 +972,15 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
     if (assignedEngineer) {
       payload.assigned_engineer = assignedEngineer;
+    }
+
+    if (currentUserRole === "Service Engineer") {
+      if (order.deliveryPartner === currentSimulatedUser) {
+        payload.delivery_partner = null;
+      }
+      if (order.assignedEngineer === currentSimulatedUser) {
+        payload.assigned_engineer = null;
+      }
     }
 
     const { error } = await supabase.from("orders").update(payload).eq("id", id);
@@ -1066,6 +1085,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     status?: Order["status"];
     orderValue?: number;
     gstNumber?: string | null;
+    deliveryDate?: string | null;
   }) => {
     const order = orders.find(o => o.id === id);
     if (!order) return;
@@ -1076,8 +1096,35 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (updates.city !== undefined) payload.city = updates.city;
     if (updates.branch !== undefined) payload.branch = updates.branch;
     if (updates.supplierId !== undefined) payload.supplier_id = updates.supplierId;
-    if (updates.deliveryPartner !== undefined) payload.delivery_partner = updates.deliveryPartner;
-    if (updates.assignedEngineer !== undefined) payload.assigned_engineer = updates.assignedEngineer;
+    
+    if (updates.deliveryPartner !== undefined) {
+      payload.delivery_partner = updates.deliveryPartner;
+      if (updates.deliveryPartner !== (order.deliveryPartner || null) && updates.deliveryPartner !== null) {
+        payload.engineer_assign_alert = true;
+      }
+    }
+    
+    if (updates.assignedEngineer !== undefined) {
+      payload.assigned_engineer = updates.assignedEngineer;
+      if (updates.assignedEngineer !== (order.assignedEngineer || null) && updates.assignedEngineer !== null) {
+        payload.engineer_assign_alert = true;
+      }
+    }
+    
+    if (updates.deliveryDate !== undefined) {
+      payload.delivery_date = updates.deliveryDate;
+      const cleanNewDate = updates.deliveryDate ? new Date(updates.deliveryDate).toISOString() : null;
+      const cleanOldDate = order.deliveryDate ? new Date(order.deliveryDate).toISOString() : null;
+      if (cleanNewDate !== cleanOldDate) {
+        if (currentUserRole === "Owner") {
+          payload.engineer_reschedule_alert = true;
+          payload.owner_reschedule_alert = false;
+        } else if (currentUserRole === "Service Engineer") {
+          payload.owner_reschedule_alert = true;
+          payload.engineer_reschedule_alert = false;
+        }
+      }
+    }
     
     if (updates.status !== undefined) {
       payload.status = updates.status;
@@ -1112,6 +1159,9 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (updates.assignedEngineer) changes.push(`Service Engineer to "${updates.assignedEngineer}"`);
     else if (updates.assignedEngineer === null) changes.push(`Service Engineer cleared`);
     
+    if (updates.deliveryDate) changes.push(`Delivery Date to "${updates.deliveryDate}"`);
+    else if (updates.deliveryDate === null) changes.push(`Delivery Date cleared`);
+
     if (updates.status) changes.push(`Status to "${updates.status}"`);
     if (updates.orderValue !== undefined) changes.push(`Order Value to ₹${updates.orderValue}`);
     if (updates.gstNumber !== undefined) changes.push(`GST Number updated`);
@@ -1157,6 +1207,20 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     }
 
+    await refreshData();
+  };
+
+  const dismissOrderAlert = async (orderId: string, alertType: "owner_reschedule" | "engineer_reschedule" | "engineer_assign") => {
+    const payload: any = {};
+    if (alertType === "owner_reschedule") payload.owner_reschedule_alert = false;
+    if (alertType === "engineer_reschedule") payload.engineer_reschedule_alert = false;
+    if (alertType === "engineer_assign") payload.engineer_assign_alert = false;
+
+    const { error } = await supabase.from("orders").update(payload).eq("id", orderId);
+    if (error) {
+      console.error("Error dismissing order alert:", error);
+      return;
+    }
     await refreshData();
   };
 
@@ -1943,7 +2007,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       employees,
       cities,
       addLead, updateLead, updateLeadStatus, addNoteToLead,
-      addOrder, updateOrderStatus, updateOrderValue, updateOrderDetails, uploadQuotation, toggleQuotationApproval, deleteQuotation,
+      addOrder, updateOrderStatus, updateOrderValue, updateOrderDetails, dismissOrderAlert, uploadQuotation, toggleQuotationApproval, deleteQuotation,
       addNoteToOrder, logComplaint, assignComplaint, updateComplaintStatus,
       addInventoryStock, addPayment, togglePaymentComplete,
       completeServiceCheckup, completeMajorService, uploadServiceQuotation,

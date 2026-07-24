@@ -86,6 +86,13 @@ ALTER TABLE notes ADD COLUMN IF NOT EXISTS visit_id VARCHAR(50) REFERENCES visit
 
 -- 14. Drop constraints and add new check constraints for Lead Statuses
 ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_status_check;
+
+-- Update existing rows to conform to the new status constraint
+UPDATE leads SET status = 'In Discussion' WHERE status = 'In Process';
+UPDATE leads SET status = 'New' WHERE status = 'Postponed';
+UPDATE leads SET status = 'Disqualified' WHERE status = 'Unavailable';
+UPDATE leads SET status = 'New' WHERE status NOT IN ('New', 'In Quotation', 'In Discussion', 'Win', 'Lost', 'Disqualified', 'Converted');
+
 ALTER TABLE leads ADD CONSTRAINT leads_status_check CHECK (
   status IN ('New', 'In Quotation', 'In Discussion', 'Win', 'Lost', 'Disqualified', 'Converted')
 );
@@ -108,3 +115,16 @@ CREATE TABLE IF NOT EXISTS quotation_requests (
     resolved BOOLEAN NOT NULL DEFAULT FALSE
 );
 
+
+-- 17. Drop and recreate orders status check constraint to exclude 'In Process'
+ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check;
+UPDATE orders SET status = 'Payment Pending' WHERE status = 'In Process';
+ALTER TABLE orders ADD CONSTRAINT orders_status_check CHECK (
+  status IN ('Payment Pending', 'Order Placed with Supplier', 'Commissioning Pending', 'Commissioned/Completed')
+);
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_date TIMESTAMPTZ;
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS owner_reschedule_alert BOOLEAN DEFAULT FALSE;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS engineer_reschedule_alert BOOLEAN DEFAULT FALSE;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS engineer_assign_alert BOOLEAN DEFAULT FALSE;

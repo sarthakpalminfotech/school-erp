@@ -423,12 +423,21 @@ export const LeadsPage: React.FC = () => {
             </button>
             <div className="flex items-center gap-2">
               {canWrite && (
-                <button
-                  onClick={() => handleOpenEditLead(selectedLeadDetails)}
-                  className="p-2 border bg-white rounded-lg hover:bg-slate-100 shadow-sm text-slate-650"
-                >
-                  <Edit2 size={16} />
-                </button>
+                <>
+                  <button
+                    onClick={() => handleOpenFollowUp(selectedLeadDetails.id)}
+                    className="p-2 border bg-white rounded-lg hover:bg-slate-100 shadow-sm text-slate-650 flex items-center justify-center"
+                    title="Set Follow-up Alert"
+                  >
+                    <Bell size={16} />
+                  </button>
+                  <button
+                    onClick={() => handleOpenEditLead(selectedLeadDetails)}
+                    className="p-2 border bg-white rounded-lg hover:bg-slate-100 shadow-sm text-slate-650 flex items-center justify-center"
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                </>
               )}
               <div className="shrink-0">
                 {selectedLeadDetails.status === "Converted" || !canWrite ? (
@@ -882,19 +891,6 @@ export const LeadsPage: React.FC = () => {
                             <option value="Disqualified">Disqualified</option>
                           </select>
                         )}
-                        
-                        {canWrite && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenFollowUp(lead.id);
-                            }}
-                            className="ml-2 rounded-full p-1 bg-amber-50 text-amber-600 hover:bg-amber-100 transition shadow-sm border border-amber-200 inline-flex items-center"
-                            title="Set Follow-up Alert"
-                          >
-                            <Bell size={12} />
-                          </button>
-                        )}
                       </div>
                     </div>
 
@@ -945,9 +941,9 @@ export const LeadsPage: React.FC = () => {
 
       {/* CREATE / EDIT LEAD DIALOG */}
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4 backdrop-blur-sm">
-          <div className="max-h-[92vh] w-full max-w-xl overflow-auto rounded-2xl bg-white shadow-2xl animate-scaleUp">
-            <div className="flex items-center justify-between border-b p-5">
+        <div className="fixed inset-0 z-50 flex flex-col bg-white sm:bg-slate-900/40 sm:grid sm:place-items-center sm:p-4 sm:backdrop-blur-sm">
+          <div className="h-full w-full sm:h-auto sm:max-h-[92vh] sm:max-w-xl overflow-y-auto sm:rounded-2xl bg-white shadow-2xl animate-scaleUp flex flex-col">
+            <div className="flex items-center justify-between border-b p-5 sticky top-0 bg-white z-10">
               <div>
                 <h2 className="font-display text-xl font-bold">{isEditMode ? "Edit Lead Details" : "Create a New Lead"}</h2>
                 <p className="mt-1 text-sm text-slate-500">{isEditMode ? "Update the information for this prospect." : "Log client details for sales tracking."}</p>
@@ -955,7 +951,7 @@ export const LeadsPage: React.FC = () => {
               <button onClick={() => { setIsCreateOpen(false); setIsEditMode(false); setEditingLeadId(null); }} className="rounded-lg p-2 hover:bg-slate-100 transition"><X size={18} /></button>
             </div>
             
-            <form onSubmit={handleCreateLead}>
+            <form onSubmit={handleCreateLead} className="flex-1 flex flex-col justify-between">
               <div className="grid gap-4 p-5 sm:grid-cols-2">
                 {formError && (
                   <div className="col-span-2 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 p-2.5 rounded-lg">
@@ -973,89 +969,93 @@ export const LeadsPage: React.FC = () => {
                   />
                 </label>
 
-                <label className="text-sm font-semibold text-slate-700 col-span-2 sm:col-span-1">
-                  Contact Person <span className="text-rose-500">*</span>
-                  <input
-                    value={formContact}
-                    onChange={e => setFormContact(e.target.value)}
-                    placeholder="Person name"
-                    className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
-                  />
-                </label>
-
-                <label className="text-sm font-semibold text-slate-700 col-span-2 sm:col-span-1">
-                  Contact Phone Number <span className="text-rose-500">*</span>
-                  <input
-                    value={formPhone}
-                    onChange={e => setFormPhone(e.target.value)}
-                    placeholder="Number"
-                    className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
-                  />
-                </label>
-
-                <label className="text-sm font-semibold text-slate-700 col-span-2 sm:col-span-1">
-                  City <span className="text-rose-500">*</span>
-                  <select
-                    value={formCity}
-                    onChange={e => setFormCity(e.target.value)}
-                    className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
-                  >
-                    {cities.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </label>
-
-                {matchedCustomer ? (
-                  <div className="col-span-2 sm:col-span-1 flex flex-col justify-end">
-                    <label className="text-sm font-semibold text-slate-700">
-                      Select Branch <span className="text-rose-500">*</span>
-                      <select
-                        value={isAddingNewBranch ? "__new__" : formBranch}
-                        onChange={e => {
-                          if (e.target.value === "__new__") {
-                            setIsAddingNewBranch(true);
-                            setFormBranch("");
-                          } else {
-                            setIsAddingNewBranch(false);
-                            setFormBranch(e.target.value);
-                          }
-                        }}
-                        className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
-                        required
-                      >
-                        <option value="">-- Choose Branch --</option>
-                        {(matchedCustomer.branches || []).map(b => (
-                          <option key={b} value={b}>{b}</option>
-                        ))}
-                        <option value="__new__">+ Add New Branch</option>
-                      </select>
-                    </label>
-                    {(isAddingNewBranch || !(matchedCustomer.branches && matchedCustomer.branches.length > 0)) && (
-                      <label className="text-sm font-semibold text-slate-700 mt-2">
-                        New Branch Name <span className="text-rose-500">*</span>
-                        <input
-                          value={formBranch}
-                          onChange={e => setFormBranch(e.target.value)}
-                          placeholder="e.g. GIDC Unit 2"
-                          className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
-                          required
-                        />
-                      </label>
-                    )}
-                  </div>
-                ) : (
-                  <label className="text-sm font-semibold text-slate-700 col-span-2 sm:col-span-1">
-                    Branch Name <span className="text-rose-500">*</span>
+                <div className="grid grid-cols-2 gap-3 col-span-2">
+                  <label className="text-sm font-semibold text-slate-700">
+                    Contact Person <span className="text-rose-500">*</span>
                     <input
-                      value={formBranch}
-                      onChange={e => setFormBranch(e.target.value)}
-                      placeholder="e.g. GIDC Unit 2"
+                      value={formContact}
+                      onChange={e => setFormContact(e.target.value)}
+                      placeholder="Person name"
                       className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
-                      required
                     />
                   </label>
-                )}
+
+                  <label className="text-sm font-semibold text-slate-700">
+                    Contact Phone Number <span className="text-rose-500">*</span>
+                    <input
+                      value={formPhone}
+                      onChange={e => setFormPhone(e.target.value)}
+                      placeholder="Number"
+                      className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 col-span-2">
+                  <label className="text-sm font-semibold text-slate-700">
+                    City <span className="text-rose-500">*</span>
+                    <select
+                      value={formCity}
+                      onChange={e => setFormCity(e.target.value)}
+                      className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
+                    >
+                      {cities.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  {matchedCustomer ? (
+                    <div className="flex flex-col justify-end">
+                      <label className="text-sm font-semibold text-slate-700">
+                        Select Branch <span className="text-rose-500">*</span>
+                        <select
+                          value={isAddingNewBranch ? "__new__" : formBranch}
+                          onChange={e => {
+                            if (e.target.value === "__new__") {
+                              setIsAddingNewBranch(true);
+                              setFormBranch("");
+                            } else {
+                              setIsAddingNewBranch(false);
+                              setFormBranch(e.target.value);
+                            }
+                          }}
+                          className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
+                          required
+                        >
+                          <option value="">-- Choose Branch --</option>
+                          {(matchedCustomer.branches || []).map(b => (
+                            <option key={b} value={b}>{b}</option>
+                          ))}
+                          <option value="__new__">+ Add New Branch</option>
+                        </select>
+                      </label>
+                      {(isAddingNewBranch || !(matchedCustomer.branches && matchedCustomer.branches.length > 0)) && (
+                        <label className="text-sm font-semibold text-slate-700 mt-2">
+                          New Branch Name <span className="text-rose-500">*</span>
+                          <input
+                            value={formBranch}
+                            onChange={e => setFormBranch(e.target.value)}
+                            placeholder="e.g. GIDC Unit 2"
+                            className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
+                            required
+                          />
+                        </label>
+                      )}
+                    </div>
+                  ) : (
+                    <label className="text-sm font-semibold text-slate-700">
+                      Branch Name <span className="text-rose-500">*</span>
+                      <input
+                        value={formBranch}
+                        onChange={e => setFormBranch(e.target.value)}
+                        placeholder="e.g. GIDC Unit 2"
+                        className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
+                        required
+                      />
+                    </label>
+                  )}
+                </div>
 
                 <label className="text-sm font-semibold text-slate-700 col-span-2">
                   Detailed Address
@@ -1067,55 +1067,70 @@ export const LeadsPage: React.FC = () => {
                   />
                 </label>
 
-                <label className="text-sm font-semibold text-slate-700 col-span-2 sm:col-span-1">
-                  Assigned Salesperson <span className="text-rose-500">*</span>
-                  <select
-                    value={formSalesperson}
-                    onChange={e => setFormSalesperson(e.target.value)}
-                    className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
-                  >
-                    {employees.filter(emp => emp.role === "Sales Person" || emp.role === "Owner").map(emp => (
-                      <option key={emp.name} value={emp.name}>{emp.name}</option>
-                    ))}
-                  </select>
-                </label>
+                <div className="grid grid-cols-2 gap-3 col-span-2">
+                  {currentUserRole === "Owner" ? (
+                    <label className="text-sm font-semibold text-slate-700">
+                      Assigned Salesperson <span className="text-rose-500">*</span>
+                      <select
+                        value={formSalesperson}
+                        onChange={e => setFormSalesperson(e.target.value)}
+                        className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
+                      >
+                        {employees.filter(emp => emp.role === "Sales Person" || emp.role === "Owner").map(emp => (
+                          <option key={emp.name} value={emp.name}>{emp.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <label className="text-sm font-semibold text-slate-700">
+                      Assigned Salesperson
+                      <input
+                        value={formSalesperson || currentSimulatedUser}
+                        disabled
+                        className="mt-1.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none text-slate-500 cursor-not-allowed"
+                      />
+                    </label>
+                  )}
 
-                <label className="text-sm font-semibold text-slate-700 col-span-2 sm:col-span-1">
-                  Status <span className="text-rose-500">*</span>
-                  <select
-                    value={formStatus}
-                    onChange={e => setFormStatus(e.target.value as Lead["status"])}
-                    className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
-                  >
-                    <option value="New">New</option>
-                    <option value="In Quotation">In Quotation</option>
-                    <option value="In Discussion">In Discussion</option>
-                    <option value="Win">Win</option>
-                    <option value="Lost">Lost</option>
-                    <option value="Disqualified">Disqualified</option>
-                  </select>
-                </label>
-
-                <label className="text-sm font-semibold text-slate-700 col-span-2 sm:col-span-1">
-                  GST Number (Optional)
-                  <input
-                    value={formGstNumber}
-                    onChange={e => setFormGstNumber(e.target.value)}
-                    className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65] uppercase"
-                    placeholder="e.g. 27ABCDE1234F1Z5"
-                  />
-                </label>
-
-                {currentUserRole === "Owner" && (
-                  <label className="text-sm font-semibold text-slate-700 col-span-2 sm:col-span-1">
-                    Created At
+                  <label className="text-sm font-semibold text-slate-700">
+                    GST Number (Optional)
                     <input
-                      type="datetime-local"
-                      value={formCreatedAt}
-                      onChange={e => setFormCreatedAt(e.target.value)}
-                      className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
+                      value={formGstNumber}
+                      onChange={e => setFormGstNumber(e.target.value)}
+                      className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65] uppercase"
+                      placeholder="e.g. 27ABCDE1234F1Z5"
                     />
                   </label>
+                </div>
+
+                {currentUserRole === "Owner" && (
+                  <div className="grid grid-cols-2 gap-3 col-span-2">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Status <span className="text-rose-500">*</span>
+                      <select
+                        value={formStatus}
+                        onChange={e => setFormStatus(e.target.value as Lead["status"])}
+                        className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
+                      >
+                        <option value="New">New</option>
+                        <option value="In Quotation">In Quotation</option>
+                        <option value="In Discussion">In Discussion</option>
+                        <option value="Win">Win</option>
+                        <option value="Lost">Lost</option>
+                        <option value="Disqualified">Disqualified</option>
+                      </select>
+                    </label>
+
+                    <label className="text-sm font-semibold text-slate-700">
+                      Created At
+                      <input
+                        type="datetime-local"
+                        value={formCreatedAt}
+                        onChange={e => setFormCreatedAt(e.target.value)}
+                        className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
+                      />
+                    </label>
+                  </div>
                 )}
 
                 {(formStatus === "Lost" || formStatus === "Disqualified") && (
@@ -1131,7 +1146,7 @@ export const LeadsPage: React.FC = () => {
                     />
                   </div>
                 )}
-
+                
                 {/* Product Selection Sub-form */}
                 <div className="col-span-2 border-t pt-4 mt-2">
                   <div className="flex justify-between items-center mb-3">
@@ -1141,7 +1156,7 @@ export const LeadsPage: React.FC = () => {
                       onClick={() => setFormProducts([...formProducts, { productId: "", quantity: 1, invoiceAmount: 0 }])}
                       variant="outline"
                       size="sm"
-                      className="text-xs flex items-center gap-1 py-1 px-2.5 border-slate-300 rounded-lg"
+                      className="text-xs flex items-center gap-1 py-1 px-2.5 border-slate-300 rounded-lg bg-white hover:bg-slate-50 shadow-sm"
                     >
                       <Plus size={12} /> Add Product
                     </Button>
@@ -1223,14 +1238,14 @@ export const LeadsPage: React.FC = () => {
                     );
                   })}
 
-                  <div className="mt-3 text-right bg-slate-50 p-2.5 rounded-lg border text-xs font-bold text-slate-700">
+                  <div className="mt-3.5 text-right bg-slate-50 p-2.5 rounded-lg border text-xs font-bold text-slate-700">
                     Total Lead Value: <span className="text-emerald-700 text-sm font-extrabold">₹{formProducts.reduce((sum, p) => sum + (p.quantity * p.invoiceAmount), 0).toLocaleString()}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 border-t p-5 bg-slate-50/50 rounded-b-2xl">
-                <Button type="button" onClick={() => { setIsCreateOpen(false); setIsEditMode(false); setEditingLeadId(null); }} variant="ghost" className="text-slate-600 rounded-xl">
+              <div className="flex justify-end gap-3 border-t p-5 bg-slate-50/50 sticky bottom-0 bg-white z-10">
+                <Button type="button" onClick={() => { setIsCreateOpen(false); setIsEditMode(false); setEditingLeadId(null); }} variant="ghost" className="text-slate-650 rounded-xl">
                   Cancel
                 </Button>
                 <Button type="submit" className="rounded-xl bg-[#173c2d] hover:bg-[#204a3b] text-white px-6">
