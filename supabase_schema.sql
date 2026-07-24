@@ -14,6 +14,7 @@ DROP TABLE IF EXISTS complaints CASCADE;
 DROP TABLE IF EXISTS quotations CASCADE;
 DROP TABLE IF EXISTS orders CASCADE;
 DROP TABLE IF EXISTS notes CASCADE;
+DROP TABLE IF EXISTS visits CASCADE;
 DROP TABLE IF EXISTS leads CASCADE;
 DROP TABLE IF EXISTS customers CASCADE;
 DROP TABLE IF EXISTS inventory CASCADE;
@@ -35,7 +36,8 @@ CREATE TABLE employee_master (
     role VARCHAR(50),
     contact VARCHAR(50),
     city VARCHAR(100) REFERENCES cities(name) ON DELETE SET NULL,
-    tone VARCHAR(100) NOT NULL DEFAULT 'bg-teal-100 text-teal-800'
+    tone VARCHAR(100) NOT NULL DEFAULT 'bg-teal-100 text-teal-800',
+    permissions JSONB DEFAULT '{}'::jsonb
 );
 
 -- 3. Supplier Master
@@ -99,17 +101,49 @@ CREATE TABLE leads (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 9. Notes (linked to Leads or Orders)
+-- 8b. Visits
+CREATE TABLE visits (
+    id VARCHAR(50) PRIMARY KEY,
+    company_name VARCHAR(200) NOT NULL,
+    contact_person VARCHAR(150),
+    phone VARCHAR(50),
+    city VARCHAR(100) REFERENCES cities(name) ON DELETE SET NULL,
+    address TEXT,
+    branch VARCHAR(150),
+    products_selected JSONB DEFAULT '[]'::jsonb,
+    salesperson VARCHAR(150),
+    status VARCHAR(50) NOT NULL CHECK (status IN (
+        'Pending', 
+        'Started', 
+        'In communication', 
+        'Unavailable', 
+        'Postponed', 
+        'Disqualified', 
+        'Convert to lead', 
+        'Lost'
+    )),
+    scheduled_at TIMESTAMPTZ,
+    start_time TIMESTAMPTZ,
+    start_location JSONB,
+    follow_up_date TIMESTAMPTZ,
+    reason TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 9. Notes (linked to Leads, Orders or Visits)
 CREATE TABLE notes (
     id VARCHAR(100) PRIMARY KEY,
     lead_id VARCHAR(50) REFERENCES leads(id) ON DELETE CASCADE,
     order_id VARCHAR(50), -- Can be linked to order too
+    visit_id VARCHAR(50) REFERENCES visits(id) ON DELETE CASCADE,
     text TEXT NOT NULL,
     photo TEXT,
     voice_note TEXT,
     timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     username VARCHAR(150) NOT NULL
 );
+
 
 -- 10. Orders
 CREATE TABLE orders (

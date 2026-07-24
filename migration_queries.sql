@@ -51,3 +51,60 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_number VARCHAR(50);
 -- 12. Add checkup and major service assignments to service_cycles
 ALTER TABLE service_cycles ADD COLUMN IF NOT EXISTS assigned_checkup_engineer VARCHAR(150);
 ALTER TABLE service_cycles ADD COLUMN IF NOT EXISTS assigned_major_engineer VARCHAR(150);
+
+-- 13. Create visits table and update notes table
+CREATE TABLE IF NOT EXISTS visits (
+    id VARCHAR(50) PRIMARY KEY,
+    company_name VARCHAR(200) NOT NULL,
+    contact_person VARCHAR(150),
+    phone VARCHAR(50),
+    city VARCHAR(100) REFERENCES cities(name) ON DELETE SET NULL,
+    address TEXT,
+    branch VARCHAR(150),
+    products_selected JSONB DEFAULT '[]'::jsonb,
+    salesperson VARCHAR(150), -- Not foreign key, as salesperson names might be flexible
+    status VARCHAR(50) NOT NULL CHECK (status IN (
+        'Pending', 
+        'Started', 
+        'In communication', 
+        'Unavailable', 
+        'Postponed', 
+        'Disqualified', 
+        'Convert to lead', 
+        'Lost'
+    )),
+    scheduled_at TIMESTAMPTZ,
+    start_time TIMESTAMPTZ,
+    start_location JSONB,
+    follow_up_date TIMESTAMPTZ,
+    reason TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS visit_id VARCHAR(50) REFERENCES visits(id) ON DELETE CASCADE;
+
+-- 14. Drop constraints and add new check constraints for Lead Statuses
+ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_status_check;
+ALTER TABLE leads ADD CONSTRAINT leads_status_check CHECK (
+  status IN ('New', 'In Quotation', 'In Discussion', 'Win', 'Lost', 'Disqualified', 'Converted')
+);
+
+-- 15. Add substatus and converted_at columns to leads
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS substatus VARCHAR(100);
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS converted_at TIMESTAMPTZ;
+
+-- 16. Create quotation_requests table to track quotation ask events and alerts
+CREATE TABLE IF NOT EXISTS quotation_requests (
+    id VARCHAR(100) PRIMARY KEY,
+    lead_id VARCHAR(50) REFERENCES leads(id) ON DELETE CASCADE,
+    order_id VARCHAR(50) REFERENCES orders(id) ON DELETE CASCADE,
+    requested_types JSONB NOT NULL, -- e.g. ['Technical', 'Bank']
+    notes TEXT,
+    photo TEXT,
+    voice_note TEXT,
+    requested_by VARCHAR(150) NOT NULL,
+    requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved BOOLEAN NOT NULL DEFAULT FALSE
+);
+

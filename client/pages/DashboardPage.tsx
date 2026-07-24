@@ -67,12 +67,12 @@ export const DashboardPage: React.FC = () => {
   // Sales Person Lead Status aggregations
   const salesStats = useMemo(() => {
     const total = salesFilteredLeads.length;
-    const inProcess = salesFilteredLeads.filter(l => l.status === "In Process").length;
-    const postponed = salesFilteredLeads.filter(l => l.status === "Postponed").length;
+    const inProcess = salesFilteredLeads.filter(l => l.status === "In Discussion" || l.status === "In Quotation").length;
+    const newLeads = salesFilteredLeads.filter(l => l.status === "New").length;
     const lost = salesFilteredLeads.filter(l => l.status === "Lost").length;
     const win = salesFilteredLeads.filter(l => l.status === "Win" || l.status === "Converted").length;
 
-    return { total, inProcess, postponed, lost, win };
+    return { total, inProcess, newLeads, lost, win };
   }, [salesFilteredLeads]);
 
   // Owner Financial Summary
@@ -195,7 +195,7 @@ export const DashboardPage: React.FC = () => {
       city: rcCity,
       branch: rcBranch,
       address: rcAddress,
-      status: "In Process"
+      status: "New"
     });
 
     setRcCompany("");
@@ -386,8 +386,8 @@ export const DashboardPage: React.FC = () => {
               <p className="text-2xl font-bold text-sky-850">{salesStats.inProcess}</p>
             </div>
             <div className="rounded-2xl border p-5 bg-white shadow-sm space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Postponed</span>
-              <p className="text-2xl font-bold text-amber-800">{salesStats.postponed}</p>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">New Leads</span>
+              <p className="text-2xl font-bold text-amber-800">{salesStats.newLeads}</p>
             </div>
             <div className="rounded-2xl border p-5 bg-white shadow-sm space-y-1">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Opportunities Won</span>
@@ -408,10 +408,10 @@ export const DashboardPage: React.FC = () => {
               </h3>
 
               <div className="space-y-2">
-                {leads.filter(l => l.status === "Postponed" && l.followUpDate).length === 0 ? (
+                {leads.filter(l => l.followUpDate).length === 0 ? (
                   <p className="text-xs text-slate-400 italic text-center py-6">No scheduled follow-up reminders found.</p>
                 ) : (
-                  leads.filter(l => l.status === "Postponed" && l.followUpDate).map(l => (
+                  leads.filter(l => l.followUpDate).map(l => (
                     <div key={l.id} className="flex justify-between items-center p-3 border rounded-xl text-xs bg-slate-50/50 hover:bg-slate-50 transition">
                       <div>
                         <strong className="text-slate-800">{l.company}</strong>

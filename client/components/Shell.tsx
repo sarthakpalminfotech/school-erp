@@ -19,7 +19,17 @@ interface ShellProps {
 export const Shell: React.FC<ShellProps> = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
-  const { currentUserRole, setCurrentUserRole, currentSimulatedUser, setCurrentSimulatedUser, employees, complaints, inventory, hasReadPermission, orders } = useAppState();
+  const { currentUserRole, setCurrentUserRole, currentSimulatedUser, setCurrentSimulatedUser, employees, complaints, inventory, hasReadPermission, orders, visits } = useAppState();
+
+  const hasUpcomingVisit = React.useMemo(() => {
+    const now = new Date();
+    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+    return (visits || []).some(v => {
+      if (!v.scheduledAt || v.status !== 'Pending') return false;
+      const sched = new Date(v.scheduledAt);
+      return sched >= now && sched <= oneHourFromNow;
+    });
+  }, [visits]);
 
   const navigation = [
     { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
@@ -29,6 +39,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     { label: "Complaints", to: "/complaints", icon: CircleHelp, count: complaints.filter(c => c.status !== "Resolved/Closed").length },
     { label: "Inventory", to: "/inventory", icon: Box, alert: inventory.some(p => p.quantity <= p.threshold) },
     { label: "Payment Ledger", to: "/ledger", icon: CreditCard },
+    { label: "Visits", to: "/visits", icon: CalendarClock, alert: hasUpcomingVisit },
   ];
 
   const filteredNavigation = navigation.filter(item => {
@@ -76,6 +87,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         return "Master Data";
       case "/dashboard":
         return "Dashboard";
+      case "/visits":
+        return "Visits";
       default:
         return "NexAir Operations";
     }
@@ -209,17 +222,17 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileOpen(true)}
-              className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white lg:hidden"
+              className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white lg:hidden shrink-0"
             >
               <Menu size={18} />
             </button>
-            <div className="hidden items-center gap-2 text-sm text-slate-500 sm:flex">
-              <span>Workspace</span>
-              <span className="text-slate-300">/</span>
-              <span className="font-medium text-slate-800">{getPageTitle()}</span>
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span className="hidden sm:inline text-slate-400">Workspace</span>
+              <span className="hidden sm:inline text-slate-300">/</span>
+              <span className="font-semibold text-slate-805 text-base lg:text-sm text-slate-800">{getPageTitle()}</span>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
             <div className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-amber-600 animate-ping" />
               Mode: <strong className="font-bold">{currentUserRole}</strong>

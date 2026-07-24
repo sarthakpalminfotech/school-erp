@@ -110,6 +110,7 @@ export const OrdersPage: React.FC = () => {
 
   // Timeline View State
   const [showAllTimeline, setShowAllTimeline] = useState(false);
+  const [activeDetailsTab, setActiveDetailsTab] = useState<"overview" | "docs" | "payments" | "timeline">("overview");
 
   // Active Order Detail object
   const activeOrder = useMemo(() => {
@@ -268,37 +269,23 @@ export const OrdersPage: React.FC = () => {
     }
   };
 
-  if (activeOrder) {
+  const renderOrderDetails = () => {
+    if (!activeOrder) return null;
     return (
-      <section className="mx-auto max-w-[1500px] px-4 py-6 md:px-8 md:py-8 space-y-6">
+      <>
+        <div className="min-h-screen bg-slate-50 text-slate-800 px-4 py-5 space-y-5 animate-fadeIn">
         {/* Detail Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start gap-4 pb-4 border-b">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => { setSelectedOrderId(null); setShowAllTimeline(false); }}
-              className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition"
-            >
-              <ArrowLeft size={17} />
-            </button>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-display text-2xl font-bold text-[#15251f]">{activeOrder.companyName}</h1>
-              </div>
-              <p className="text-xs text-slate-500 mt-1">
-                Order File ID: <strong>{activeOrder.id}</strong> · Location: <strong>{activeOrder.city}</strong> · Branch: <strong>{activeOrder.branch || "Main"}</strong> · Sales: <strong>{activeOrder.salesperson}</strong>
-                {activeOrder.assignedEngineer && <> · Service Eng: <strong>{activeOrder.assignedEngineer}</strong></>}
-                {activeOrder.supplierId && (
-                  <> · Supplier: <strong>{suppliers.find(s => s.id === activeOrder.supplierId)?.name || activeOrder.supplierId}</strong></>
-                )}
-                {activeOrder.deliveryPartner && <> · Delivery Partner: <strong>{activeOrder.deliveryPartner}</strong></>}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-            {/* Status Change Dropdown (Shifted here and styled like badge dropdown) */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => { setSelectedOrderId(null); setShowAllTimeline(false); }}
+            className="text-[#173c2d] font-semibold text-sm flex items-center gap-1"
+          >
+            ← Back to list
+          </button>
+          <div className="flex items-center gap-2">
+            {/* Status Change Dropdown */}
             {canWrite && (
-              <div className="flex-1 md:flex-none">
+              <div className="shrink-0">
                 <select
                   value={activeOrder.status}
                   onChange={(e) => {
@@ -309,7 +296,6 @@ export const OrdersPage: React.FC = () => {
                     }
                     if (newStatus === "Commissioning Pending") {
                       if (currentUserRole === "Service Engineer") {
-                        // Service Engineers cannot assign engineers for Commissioning Pending status
                         updateOrderStatus(activeOrder.id, "Commissioning Pending");
                       } else {
                         setIsAssignOpen(true);
@@ -322,8 +308,7 @@ export const OrdersPage: React.FC = () => {
                       updateOrderStatus(activeOrder.id, newStatus);
                     }
                   }}
-                  className={`w-full md:w-auto inline-flex items-center rounded-xl px-3 py-2.5 text-xs font-bold border outline-none cursor-pointer appearance-none pr-8 bg-no-repeat bg-right ${getStatusColor(activeOrder.status)}`}
-                  style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='currentColor' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E")`, backgroundPosition: 'calc(100% - 9px) center' }}
+                  className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold cursor-pointer outline-none bg-white ${getStatusColor(activeOrder.status)}`}
                 >
                   {currentUserRole === "Service Engineer" ? (
                     <>
@@ -347,39 +332,39 @@ export const OrdersPage: React.FC = () => {
             )}
             
             {canWrite && (
-              <Button
+              <button
                 onClick={() => setIsComplaintOpen(true)}
-                className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl px-3 sm:px-4 py-2.5 flex items-center gap-1.5 shadow-sm"
+                className="p-2 border bg-white rounded-lg hover:bg-slate-100 shadow-sm text-rose-600"
+                title="Log Complaint"
               >
-                <ShieldAlert size={14} />
-                <span className="hidden sm:inline">Log Complaint</span>
-              </Button>
+                <ShieldAlert size={16} />
+              </button>
             )}
 
             {currentUserRole === "Owner" && canWrite && (
-              <Button
+              <button
                 onClick={openEditDetails}
-                className="bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold rounded-xl px-3 sm:px-4 py-2.5 flex items-center gap-1.5 shadow-sm"
+                className="p-2 border bg-white rounded-lg hover:bg-slate-100 shadow-sm text-slate-650"
+                title="Edit Order Details"
               >
-                <Edit3 size={14} />
-                <span className="hidden sm:inline">Edit Order Details</span>
-              </Button>
+                <Edit3 size={16} />
+              </button>
             )}
           </div>
         </div>
 
         {/* Action Alerts for Owner */}
         {currentUserRole === "Owner" && (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2.5">
             {activeOrder.status === "Order Placed with Supplier" && !activeOrder.deliveryPartner && (
               <div 
                 onClick={openEditDetails}
-                className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start gap-3 cursor-pointer hover:bg-amber-100/70 active:scale-[0.99] transition-all"
+                className="bg-amber-50 border border-amber-200 p-3.5 rounded-xl flex gap-2.5 text-xs font-medium cursor-pointer"
               >
-                <AlertTriangle size={18} className="text-amber-600 mt-0.5 shrink-0" />
+                <AlertTriangle size={16} className="text-amber-600 mt-0.5 shrink-0" />
                 <div>
-                  <h4 className="font-bold text-amber-800 text-sm">Action Required: Delivery Partner Missing</h4>
-                  <p className="text-xs text-amber-700 mt-0.5">This order has been placed with the supplier but no delivery partner is assigned. Please assign one in Edit Order Details.</p>
+                  <strong className="text-amber-800">Action Required: Delivery Partner Missing</strong>
+                  <p className="text-slate-600 mt-0.5">Please assign a delivery partner in Edit Order Details.</p>
                 </div>
               </div>
             )}
@@ -387,124 +372,180 @@ export const OrdersPage: React.FC = () => {
             {activeOrder.status === "Commissioning Pending" && !activeOrder.assignedEngineer && (
               <div 
                 onClick={openEditDetails}
-                className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start gap-3 cursor-pointer hover:bg-amber-100/70 active:scale-[0.99] transition-all"
+                className="bg-amber-50 border border-amber-200 p-3.5 rounded-xl flex gap-2.5 text-xs font-medium cursor-pointer"
               >
-                <AlertTriangle size={18} className="text-amber-600 mt-0.5 shrink-0" />
+                <AlertTriangle size={16} className="text-amber-600 mt-0.5 shrink-0" />
                 <div>
-                  <h4 className="font-bold text-amber-800 text-sm">Action Required: Service Engineer Missing</h4>
-                  <p className="text-xs text-amber-700 mt-0.5">This order is pending commissioning but no service engineer is assigned. Please assign one in Edit Order Details.</p>
+                  <strong className="text-amber-800">Action Required: Service Engineer Missing</strong>
+                  <p className="text-slate-600 mt-0.5">Please assign a service engineer in Edit Order Details.</p>
                 </div>
               </div>
             )}
           </div>
         )}
 
-        {/* Detail Body */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          {/* Column 1: Document Upload & Approval */}
-          <div className="xl:col-span-2 space-y-6">
-            {/* Ordered Products Section */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b pb-3">
-                <h3 className="font-display font-bold text-slate-900 flex items-center gap-2">
-                  <FileText size={17} className="text-[#173c2d]" />
-                  <span>Ordered Products</span>
-                </h3>
-              </div>
-              <div className="space-y-2">
-                {activeOrder.productsSelected && activeOrder.productsSelected.length > 0 ? (
-                  <div className="space-y-2">
-                    {activeOrder.productsSelected.map((p, idx) => (
-                      <div key={idx} className="flex justify-between items-center text-sm text-slate-705 bg-slate-50 border rounded-xl p-3">
-                        <div>
-                          <p className="font-semibold text-slate-900">{p.productName}</p>
-                          <p className="text-xs text-slate-500 mt-0.5">Quantity: {p.quantity} · Price per Unit: ₹{p.invoiceAmount.toLocaleString()}</p>
-                        </div>
-                        <span className="font-bold text-slate-900">₹{(p.quantity * p.invoiceAmount).toLocaleString()}</span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between items-center text-sm font-bold text-slate-805 bg-emerald-50/50 border border-emerald-100 rounded-xl p-3">
-                      <span>Total Invoice Value</span>
-                      {isEditingValue ? (
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            className="w-24 rounded border px-2 py-1 text-sm outline-none font-bold text-slate-800"
-                            autoFocus
-                          />
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              if (activeOrder && editValue !== "") {
-                                updateOrderValue(activeOrder.id, parseFloat(editValue));
-                                setIsEditingValue(false);
-                              }
-                            }}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white h-7 px-3 text-xs"
-                          >
-                            Save
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setIsEditingValue(false)}
-                            className="text-slate-500 h-7 px-2"
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span className="text-emerald-800 text-base">₹{(activeOrder.orderValue || 0).toLocaleString()}</span>
-                          {currentUserRole === "Owner" && canWrite && (
-                            <button
-                              onClick={() => {
-                                setEditValue(String(activeOrder.orderValue || 0));
-                                setIsEditingValue(true);
-                              }}
-                              className="text-xs text-blue-600 hover:underline font-semibold"
-                            >
-                              Edit
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-slate-400 italic text-center py-4">No products recorded for this order.</p>
-                )}
-              </div>
+        {/* Core details */}
+        <div className="space-y-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 leading-tight">{activeOrder.companyName}</h1>
+          </div>
+
+          <div className="grid grid-cols-2 gap-y-2.5 gap-x-4 border-t border-slate-200/80 pt-3 text-xs text-slate-650">
+            <div>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Order ID</p>
+              <p className="mt-0.5 text-slate-800 font-mono font-bold">{activeOrder.id}</p>
             </div>
-
-            {/* Quotation Management Section */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b pb-3">
-                <h3 className="font-display font-bold text-slate-900 flex items-center gap-2">
-                  <FileText size={17} className="text-[#173c2d]" />
-                  <span>Quotation Management</span>
-                </h3>
-                <span className="text-[10px] bg-slate-100 text-slate-500 font-semibold px-2 py-0.5 rounded-full">PDF, Word, or Images</span>
+            <div>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">City</p>
+              <p className="mt-0.5 text-slate-800">{activeOrder.city}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Branch</p>
+              <p className="mt-0.5 text-slate-800">{activeOrder.branch || "Main"}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Sales Representative</p>
+              <p className="mt-0.5 text-slate-800">{activeOrder.salesperson}</p>
+            </div>
+            {activeOrder.gstNumber && (
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">GST Number</p>
+                <p className="mt-0.5 text-slate-800 font-mono uppercase">{activeOrder.gstNumber}</p>
               </div>
+            )}
+            {activeOrder.assignedEngineer && (
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Assigned Engineer</p>
+                <p className="mt-0.5 text-slate-800">{activeOrder.assignedEngineer}</p>
+              </div>
+            )}
+            {activeOrder.supplierId && (
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Supplier</p>
+                <p className="mt-0.5 text-slate-800">
+                  {suppliers.find(s => s.id === activeOrder.supplierId)?.name || activeOrder.supplierId}
+                </p>
+              </div>
+            )}
+            {activeOrder.deliveryPartner && (
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Delivery Partner</p>
+                <p className="mt-0.5 text-slate-800">{activeOrder.deliveryPartner}</p>
+              </div>
+            )}
+          </div>
+        </div>
 
-              {/* Quotation Upload form (Hidden for Service Engineer) */}
-              {currentUserRole !== "Service Engineer" && canWrite && (
-                <div className="flex flex-row gap-3 items-center bg-slate-50 p-4 rounded-xl border w-full">
-                  <div className="flex-1 min-w-0">
+        {/* Tab List */}
+        <div className="flex border-b border-slate-200/85 pt-2">
+          {[
+            { id: "overview", label: "Overview" },
+            { id: "docs", label: "Docs" },
+            { id: "payments", label: "Payments" },
+            { id: "timeline", label: "Timeline" }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveDetailsTab(tab.id as any)}
+              className={`flex-1 pb-2 text-center text-xs font-semibold border-b-2 transition ${
+                activeDetailsTab === tab.id
+                  ? "border-[#173c2d] text-[#173c2d]"
+                  : "border-transparent text-slate-400"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab Contents */}
+        <div className="pt-2">
+          {activeDetailsTab === "overview" && (
+            <div className="space-y-4">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ordered Products</h3>
+              {activeOrder.productsSelected && activeOrder.productsSelected.length > 0 ? (
+                <div className="space-y-1.5">
+                  {activeOrder.productsSelected.map((p, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-xs bg-white border border-slate-200 rounded-xl p-3 shadow-xs">
+                      <div>
+                        <p className="font-semibold text-slate-850">{p.productName}</p>
+                        <p className="text-[10px] text-slate-450 mt-0.5">Qty: {p.quantity} · Price: ₹{p.invoiceAmount.toLocaleString()}</p>
+                      </div>
+                      <span className="font-bold text-slate-800">₹{(p.quantity * p.invoiceAmount).toLocaleString()}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between items-center text-xs font-bold text-slate-800 bg-emerald-50/50 border border-emerald-100 rounded-xl p-3">
+                    <span>Total Invoice Value</span>
+                    {isEditingValue ? (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          className="w-20 rounded border px-2 py-1 text-xs font-bold text-slate-800 outline-none"
+                          autoFocus
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            if (activeOrder && editValue !== "") {
+                              updateOrderValue(activeOrder.id, parseFloat(editValue));
+                              setIsEditingValue(false);
+                            }
+                          }}
+                          className="bg-emerald-650 hover:bg-emerald-700 text-white h-6 px-2 text-[10px]"
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setIsEditingValue(false)}
+                          className="text-slate-500 h-6 px-1.5 text-[10px]"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-emerald-800">₹{(activeOrder.orderValue || 0).toLocaleString()}</span>
+                        {currentUserRole === "Owner" && canWrite && (
+                          <button
+                            onClick={() => {
+                              setEditValue(String(activeOrder.orderValue || 0));
+                              setIsEditingValue(true);
+                            }}
+                            className="text-[10px] text-blue-600 hover:underline font-semibold"
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 italic">No products recorded.</p>
+              )}
+            </div>
+          )}
+
+          {activeDetailsTab === "docs" && (
+            <div className="space-y-5">
+              {/* Quotations */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Quotation Documents</h3>
+                {currentUserRole !== "Service Engineer" && canWrite && (
+                  <div className="flex gap-2 items-center bg-white border border-slate-200 p-2.5 rounded-xl">
                     <select
                       value={uploadType}
                       onChange={e => setUploadType(e.target.value as Quotation["type"])}
-                      className="w-full rounded-lg border bg-white px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
+                      className="rounded-lg border bg-white px-2 py-1.5 text-xs outline-none focus:border-[#5b8d65] flex-1"
                     >
                       <option value="Technical">Technical</option>
                       <option value="Bank">Bank</option>
                       <option value="Service">Service</option>
                     </select>
-                  </div>
-                  
-                  <div className="flex-1">
                     <input
                       type="file"
                       accept=".pdf,.doc,.docx,image/*"
@@ -521,107 +562,54 @@ export const OrdersPage: React.FC = () => {
                     <Button 
                       type="button" 
                       onClick={() => fileInputRef.current?.click()} 
-                      className="w-full bg-[#173c2d] hover:bg-[#204a3b] text-white flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-xs font-bold shadow-sm"
+                      className="bg-[#173c2d] hover:bg-[#204a3b] text-white flex items-center gap-1.5 rounded-lg py-1.5 px-3 text-xs font-semibold"
                     >
-                      <Upload size={14} />
-                      <span className="whitespace-nowrap">Upload Document</span>
+                      <Upload size={12} />
+                      <span>Upload</span>
                     </Button>
                   </div>
-                </div>
-              )}
-
-              {/* Quotation List */}
-              <div className="space-y-2.5">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Uploaded Quotations</h4>
-                {activeOrder.quotations.length === 0 ? (
-                  <p className="text-sm text-slate-400 italic text-center py-6">No quotations uploaded yet.</p>
-                ) : (
-                  <div className="divide-y divide-slate-100">
-                    {activeOrder.quotations.map(quo => (
-                      <div key={quo.id} className="flex flex-col sm:flex-row sm:items-center justify-between py-3 gap-2">
-                        <div className="flex items-start gap-3 min-w-0">
-                          <div className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-50 text-emerald-800 shrink-0">
-                            <FileText size={18} />
-                          </div>
-                          <div className="min-w-0">
-                            <p 
-                              className="text-sm font-semibold text-slate-800 truncate cursor-pointer hover:text-[#173c2d] hover:underline transition-colors" 
-                              title={quo.fileName}
-                              onClick={() => setPreviewFileName(quo.fileName)}
-                            >
-                              {quo.fileName}
-                            </p>
-                            <p className="text-[10px] text-slate-400 truncate">{quo.type} · {quo.fileSize} · Uploaded by {quo.uploadedBy} · {quo.uploadedAt}</p>
-                          </div>
+                )}
+                <div className="divide-y divide-slate-100 bg-white border border-slate-200 rounded-xl overflow-hidden">
+                  {activeOrder.quotations.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic text-center py-4">No quotations uploaded.</p>
+                  ) : (
+                    activeOrder.quotations.map(quo => (
+                      <div key={quo.id} className="flex justify-between items-center p-2.5 text-xs">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-800 truncate cursor-pointer hover:underline" onClick={() => setPreviewFileName(quo.fileName)}>{quo.fileName}</p>
+                          <p className="text-[9px] text-slate-400 mt-0.5 truncate">{quo.type} · {quo.fileSize}</p>
                         </div>
-
-                        <div className="flex items-center gap-3 shrink-0">
-                          {/* Approval Status Toggle (Visual status badge only) */}
-                          <div className="flex items-center gap-1">
-                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
-                              quo.approved
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-100"
-                                : "bg-amber-50 text-amber-700 border-amber-100"
-                            }`}>
-                              {quo.approved ? "Approved" : "Pending Approval"}
-                            </span>
-
-                            {/* Switch toggle (Visual only, Owner only) */}
-                            {currentUserRole === "Owner" && (
-                              <button
-                                onClick={() => toggleQuotationApproval(activeOrder.id, quo.id)}
-                                className="text-[10px] text-[#173c2d] hover:underline font-bold px-1.5"
-                                title="Toggle Approval"
-                              >
-                                Toggle
-                              </button>
-                            )}
-                          </div>
-
-                          {/* Delete button (Hidden for Service Engineer) */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-bold border ${quo.approved ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-amber-50 text-amber-700 border-amber-100"}`}>
+                            {quo.approved ? "Approved" : "Pending"}
+                          </span>
+                          {currentUserRole === "Owner" && (
+                            <button onClick={() => toggleQuotationApproval(activeOrder.id, quo.id)} className="text-[9px] text-[#173c2d] hover:underline font-bold">Toggle</button>
+                          )}
                           {currentUserRole !== "Service Engineer" && canWrite && (
-                            <button
-                              onClick={() => deleteQuotation(activeOrder.id, quo.id)}
-                              className="text-slate-400 hover:text-red-500 p-1"
-                              title="Delete file"
-                            >
-                              <Trash2 size={15} />
-                            </button>
+                            <button onClick={() => deleteQuotation(activeOrder.id, quo.id)} className="text-rose-600 hover:text-rose-700 p-0.5"><Trash2 size={13} /></button>
                           )}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Report Management Section */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b pb-3">
-                <h3 className="font-display font-bold text-slate-900 flex items-center gap-2">
-                  <Wrench size={17} className="text-[#173c2d]" />
-                  <span>Report Management</span>
-                </h3>
-                <span className="text-[10px] bg-slate-100 text-slate-500 font-semibold px-2 py-0.5 rounded-full">Checkup & Maintenance Reports</span>
+                    ))
+                  )}
+                </div>
               </div>
 
-              {/* Report Upload Form */}
-              {canWrite && (
-                <div className="flex flex-row gap-3 items-center bg-slate-50 p-4 rounded-xl border w-full">
-                  <div className="flex-1 min-w-0">
+              {/* Service Reports */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Service Reports</h3>
+                {canWrite && (
+                  <div className="flex gap-2 items-center bg-white border border-slate-200 p-2.5 rounded-xl">
                     <select
                       value={reportUploadType}
                       onChange={e => setReportUploadType(e.target.value as any)}
-                      className="w-full rounded-lg border bg-white px-3 py-2.5 text-sm outline-none focus:border-[#5b8d65]"
+                      className="rounded-lg border bg-white px-2 py-1.5 text-xs outline-none focus:border-[#5b8d65] flex-1"
                     >
                       <option value="Checkup">Checkup Report</option>
                       <option value="Pre-Service">Pre-Service Report</option>
                       <option value="Post-Service">Post-Service Report</option>
                     </select>
-                  </div>
-                  
-                  <div className="flex-1">
                     <input
                       type="file"
                       accept=".pdf,.doc,.docx,image/*"
@@ -638,204 +626,146 @@ export const OrdersPage: React.FC = () => {
                     <Button 
                       type="button" 
                       onClick={() => reportFileInputRef.current?.click()} 
-                      className="w-full bg-[#173c2d] hover:bg-[#204a3b] text-white flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-xs font-bold shadow-sm"
+                      className="bg-[#173c2d] hover:bg-[#204a3b] text-white flex items-center gap-1.5 rounded-lg py-1.5 px-3 text-xs font-semibold"
                     >
-                      <Upload size={14} />
-                      <span className="whitespace-nowrap">Upload Report</span>
+                      <Upload size={12} />
+                      <span>Upload</span>
                     </Button>
                   </div>
-                </div>
-              )}
-
-              {/* Report List */}
-              <div className="space-y-2.5">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Uploaded Service Reports</h4>
-                {activeReports.length === 0 ? (
-                  <p className="text-sm text-slate-400 italic text-center py-6">No service reports uploaded yet.</p>
-                ) : (
-                  <div className="divide-y divide-slate-100">
-                    {activeReports.map(rep => (
-                      <div key={rep.id} className="flex flex-col sm:flex-row sm:items-center justify-between py-3 gap-2">
-                        <div className="flex items-start gap-3 min-w-0">
-                          <div className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-50 text-emerald-800 shrink-0">
-                            <FileText size={18} />
-                          </div>
-                          <div className="min-w-0">
-                            <p 
-                              className="text-sm font-semibold text-slate-800 truncate cursor-pointer hover:text-[#173c2d] hover:underline transition-colors" 
-                              title={rep.fileName}
-                              onClick={() => setPreviewFileName(rep.fileName)}
-                            >
-                              {rep.fileName}
-                            </p>
-                            <p className="text-[10px] text-slate-400 truncate">{rep.type} · Uploaded by {rep.uploadedBy} · {new Date(rep.uploadedAt).toLocaleString()}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3 shrink-0">
-                          {canWrite && (
-                            <button
-                              onClick={() => deleteServiceReport(activeOrder.id, rep.id)}
-                              className="text-slate-400 hover:text-red-500 p-1"
-                              title="Delete report"
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
                 )}
+                <div className="divide-y divide-slate-100 bg-white border border-slate-200 rounded-xl overflow-hidden">
+                  {activeReports.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic text-center py-4">No reports uploaded.</p>
+                  ) : (
+                    activeReports.map(rep => (
+                      <div key={rep.id} className="flex justify-between items-center p-2.5 text-xs">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-800 truncate cursor-pointer hover:underline" onClick={() => setPreviewFileName(rep.fileName)}>{rep.fileName}</p>
+                          <p className="text-[9px] text-slate-400 mt-0.5 truncate">{rep.type} · By {rep.uploadedBy}</p>
+                        </div>
+                        {canWrite && (
+                          <button onClick={() => deleteServiceReport(activeOrder.id, rep.id)} className="text-rose-600 hover:text-rose-700 p-0.5 shrink-0"><Trash2 size={13} /></button>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
+          )}
 
-            {/* Payment Ledger Section */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b pb-3">
-                <h3 className="font-display font-bold text-slate-900 flex items-center gap-2">
-                  <CreditCard size={17} className="text-[#173c2d]" />
-                  <span>Payment Ledger</span>
-                </h3>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-500">Status:</span>
-                  <span
-                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border transition ${
-                      paymentTotals.balance <= 0
-                        ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                        : paymentTotals.received > 0
-                        ? "bg-amber-100 text-amber-800 border-amber-200"
-                        : "bg-red-100 text-red-800 border-red-200"
-                    }`}
-                  >
-                    {paymentTotals.balance <= 0 ? (
-                      <><CheckCircle size={12} /><span>Payment Completed</span></>
-                    ) : paymentTotals.received > 0 ? (
-                      <><Clock size={12} /><span>Partial Payment Done (Pending)</span></>
-                    ) : (
-                      <><X size={12} /><span>Payment Pending</span></>
-                    )}
-                  </span>
+          {activeDetailsTab === "payments" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-2 p-3 bg-slate-100/50 rounded-xl border text-center text-xs">
+                <div>
+                  <span className="text-[9px] font-bold text-slate-400 uppercase">Value</span>
+                  <p className="font-bold text-slate-805 mt-0.5">₹{(activeOrder.orderValue || 0).toLocaleString()}</p>
+                </div>
+                <div>
+                  <span className="text-[9px] font-bold text-slate-400 uppercase">Received</span>
+                  <p className="font-bold text-emerald-700 mt-0.5">₹{paymentTotals.received.toLocaleString()}</p>
+                </div>
+                <div>
+                  <span className="text-[9px] font-bold text-slate-400 uppercase">Balance</span>
+                  <p className={`font-bold mt-0.5 ${paymentTotals.balance === 0 ? "text-emerald-700" : "text-amber-700"}`}>₹{paymentTotals.balance.toLocaleString()}</p>
                 </div>
               </div>
 
-              {/* Running total */}
-              <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 rounded-xl border text-center">
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Order Value</span>
-                  <p className="text-sm font-bold text-slate-800 mt-0.5">₹{(activeOrder.orderValue || 0).toLocaleString()}</p>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Total Received</span>
-                  <p className="text-sm font-bold text-emerald-700 mt-0.5">₹{paymentTotals.received.toLocaleString()}</p>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Remaining Balance</span>
-                  <p className={`text-sm font-bold mt-0.5 ${paymentTotals.balance === 0 ? "text-emerald-700" : "text-amber-700"}`}>
-                    ₹{paymentTotals.balance.toLocaleString()}
-                  </p>
-                </div>
-              </div>
-
-              {/* Add Payment form */}
               {canWrite && (
-                <form onSubmit={handleAddPaymentSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end bg-slate-50 p-4 rounded-xl border">
-                  <label className="text-xs font-semibold text-slate-700 flex flex-col gap-1.5">
-                    Payment Amount (₹)
-                    <input
-                      type="number"
-                      value={payAmount}
-                      onChange={e => setPayAmount(e.target.value)}
-                      placeholder="e.g. 50000"
-                      className="w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none focus:border-[#5b8d65]"
-                      required
-                    />
-                  </label>
-                  <label className="text-xs font-semibold text-slate-700 flex flex-col gap-1.5">
-                    Remarks / Notes
-                    <input
-                      value={payNote}
-                      onChange={e => setPayNote(e.target.value)}
-                      placeholder="e.g. NEFT transfer Ref: 4810"
-                      className="w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none focus:border-[#5b8d65]"
-                    />
-                  </label>
-                  <Button type="submit" className="bg-[#173c2d] hover:bg-[#204a3b] text-white flex items-center justify-center gap-1.5 rounded-lg py-2">
-                    <Plus size={14} />
+                <form onSubmit={handleAddPaymentSubmit} className="space-y-3 bg-white border p-3.5 rounded-xl shadow-xs">
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="text-xs font-semibold text-slate-700 flex flex-col gap-1">
+                      Amount (₹)
+                      <input
+                        type="number"
+                        value={payAmount}
+                        onChange={e => setPayAmount(e.target.value)}
+                        placeholder="e.g. 50000"
+                        className="rounded-lg border bg-white px-2 py-1.5 text-xs outline-none focus:border-[#5b8d65]"
+                        required
+                      />
+                    </label>
+                    <label className="text-xs font-semibold text-slate-700 flex flex-col gap-1">
+                      Remarks
+                      <input
+                        value={payNote}
+                        onChange={e => setPayNote(e.target.value)}
+                        placeholder="e.g. NEFT"
+                        className="rounded-lg border bg-white px-2 py-1.5 text-xs outline-none focus:border-[#5b8d65]"
+                      />
+                    </label>
+                  </div>
+                  <Button type="submit" className="w-full bg-[#173c2d] hover:bg-[#204a3b] text-white flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-semibold">
+                    <Plus size={12} />
                     <span>Log Payment</span>
                   </Button>
                 </form>
               )}
 
-              {/* List of payments */}
-              <div className="space-y-2.5">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Transactions Ledger</h4>
-                {activeLedger.entries.length === 0 ? (
-                  <p className="text-sm text-slate-400 italic text-center py-4">No payment entries registered.</p>
-                ) : (
-                  <div className="divide-y divide-slate-100">
-                    {activeLedger.entries.map(entry => (
+              <div className="space-y-2">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Transactions Ledger</h3>
+                <div className="divide-y divide-slate-100 bg-white border rounded-xl p-2 px-3 shadow-xs">
+                  {activeLedger.entries.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic text-center py-3">No payment entries registered.</p>
+                  ) : (
+                    activeLedger.entries.map(entry => (
                       <div key={entry.id} className="flex justify-between py-2 text-xs">
                         <div>
                           <p className="font-semibold text-slate-800">₹{entry.amount.toLocaleString()}</p>
-                          <p className="text-[10px] text-slate-500">{entry.note}</p>
+                          <p className="text-[9px] text-slate-450">{entry.note}</p>
                         </div>
-                        <div className="text-right text-slate-400 font-medium">
-                          {entry.date}
-                        </div>
+                        <span className="text-slate-400 font-medium text-[10px]">{entry.date}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Column 2: Timeline & Notes */}
-          <div className="space-y-6">
-            {/* Reusable Notes component */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-              <h3 className="font-display font-bold text-slate-900 border-b pb-3">Operational Notes</h3>
-              <NotesComponent
-                notes={[]}
-                readOnly={!canWrite}
-                onAddNote={(text, photo, voice) => addNoteToOrder(activeOrder.id, text, photo, voice)}
-              />
-            </div>
-
-            {/* Timeline */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b pb-3">
-                <h3 className="font-display font-bold text-slate-900 flex items-center gap-1.5">
-                  <Clock size={16} className="text-[#173c2d]" />
-                  <span>Activity Log Timeline</span>
-                </h3>
-                <button
-                  onClick={() => setShowAllTimeline(!showAllTimeline)}
-                  className="text-[10px] font-bold text-[#173c2d] hover:underline"
-                >
-                  {showAllTimeline ? "Show Latest 3" : `View All (${activeTimelineLogs.length})`}
-                </button>
+          {activeDetailsTab === "timeline" && (
+            <div className="space-y-5">
+              {/* Operational Notes */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Operational Notes</h3>
+                <NotesComponent
+                  notes={[]}
+                  readOnly={!canWrite}
+                  onAddNote={(text, photo, voice) => addNoteToOrder(activeOrder.id, text, photo, voice)}
+                />
               </div>
 
-              <div className="relative pl-4 border-l border-slate-150 space-y-4 py-1.5">
-                {activeTimelineLogs.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">No activity logs recorded.</p>
-                ) : (
-                  (showAllTimeline ? activeTimelineLogs : activeTimelineLogs.slice(0, 3)).map(log => (
-                    <div key={log.id} className="relative text-xs">
-                      {/* Timeline dot */}
-                      <span className="absolute -left-[20.5px] top-1.5 h-2.5 w-2.5 rounded-full border bg-white border-[#173c2d]" />
-                      <div className="font-semibold text-slate-800">{log.action}</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">{log.user} · {new Date(log.timestamp).toLocaleString()}</div>
-                    </div>
-                  ))
-                )}
+              {/* Activity Timeline */}
+              <div className="space-y-3.5 border-t border-slate-200/80 pt-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Activity Log Timeline</h3>
+                  {activeTimelineLogs.length > 3 && (
+                    <button
+                      onClick={() => setShowAllTimeline(!showAllTimeline)}
+                      className="text-[10px] font-bold text-[#173c2d] hover:underline"
+                    >
+                      {showAllTimeline ? "Show Latest 3" : `View All (${activeTimelineLogs.length})`}
+                    </button>
+                  )}
+                </div>
+                <div className="relative pl-4 border-l border-slate-200 space-y-4 py-1.5 ml-1">
+                  {activeTimelineLogs.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic">No activity logs recorded.</p>
+                  ) : (
+                    (showAllTimeline ? activeTimelineLogs : activeTimelineLogs.slice(0, 3)).map(log => (
+                      <div key={log.id} className="relative text-xs">
+                        <span className="absolute -left-[20.5px] top-1 h-2 w-2 rounded-full bg-emerald-500 border border-white" />
+                        <div className="font-semibold text-slate-750">{log.action}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">{log.user} · {new Date(log.timestamp).toLocaleString()}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
-
+      </div>
         {/* LOG COMPLAINT DIALOG */}
         {isComplaintOpen && (
           <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4 backdrop-blur-sm">
@@ -865,7 +795,7 @@ export const OrdersPage: React.FC = () => {
                 </div>
 
                 <div className="flex justify-end gap-2 border-t p-4 bg-slate-50">
-                  <Button type="button" onClick={() => setIsComplaintOpen(false)} variant="ghost" className="text-slate-600 text-xs rounded-lg">
+                  <Button type="button" onClick={() => setIsComplaintOpen(false)} variant="ghost" className="text-slate-655 text-xs rounded-lg">
                     Cancel
                   </Button>
                   <Button type="submit" className="bg-rose-600 hover:bg-rose-700 text-white text-xs rounded-lg px-4">
@@ -876,6 +806,7 @@ export const OrdersPage: React.FC = () => {
             </div>
           </div>
         )}
+
 
         {/* Assign Engineer Modal */}
         {isAssignOpen && activeOrder && (
@@ -1174,173 +1105,151 @@ export const OrdersPage: React.FC = () => {
             </div>
           </div>
         )}
-      </section>
+      </>
     );
-  }
+  };
 
   return (
-    <section className="mx-auto max-w-[1500px] px-4 py-6 md:px-8 md:py-8 space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col gap-2">
-        <p className="text-xs font-semibold text-[#58705c] uppercase tracking-wider">Order Management</p>
-        <div className="flex items-center gap-4">
-          <h1 className="font-display text-3xl font-bold tracking-tight text-[#15251f]">Orders</h1>
-          {canWrite && (
-            <Button onClick={handleOpenAddOrder} className="bg-[#173c2d] hover:bg-[#204a3b] text-white flex items-center gap-1.5 rounded-xl py-1 px-3.5 text-xs h-[32px] shadow-sm">
-              <Plus size={14} />
-              <span>Manual Add Order</span>
-            </Button>
+    <>
+      {activeOrder ? renderOrderDetails() : (
+        <section className="mx-auto max-w-[1500px] px-4 py-5 space-y-4">
+          {/* Search bar & Filter icon */}
+          <div className="flex gap-2 items-center">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search orders by ID, company, or city..."
+                className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-4 text-xs outline-none focus:border-[#173c2d] focus:ring-1 focus:ring-[#173c2d]/20 transition"
+              />
+            </div>
+            <button
+              onClick={() => setIsFilterModalOpen(true)}
+              className="rounded-xl border border-slate-200 bg-white p-2 flex items-center justify-center hover:bg-slate-50 transition shadow-sm text-slate-655 h-[36px] w-[36px]"
+              title="Filters"
+            >
+              <Filter size={16} />
+            </button>
+          </div>
+
+          {/* Active filter display */}
+          {statusFilter !== "All" && (
+            <div className="flex flex-wrap gap-1.5 items-center">
+              <span className="text-[10px] font-bold text-slate-500">Filters:</span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-105 text-slate-700 text-xs border">
+                Status: {statusFilter}
+                <button onClick={() => setStatusFilter("All")}><X size={10} /></button>
+              </span>
+            </div>
           )}
-        </div>
-        <p className="text-sm text-slate-500">Manage delivery tracking, approval timelines, Quotations, and client payments.</p>
-      </div>
 
-      {/* Search panel */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-3 text-slate-400" size={17} />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search order ID, company, or city..."
-            className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-[#5b8d65] focus:ring-1 focus:ring-[#5b8d65]/30 transition"
-          />
-        </div>
-        <button
-          onClick={() => setIsFilterModalOpen(true)}
-          className="rounded-xl border border-slate-200 bg-white p-2.5 flex items-center justify-center hover:bg-slate-50 transition shadow-sm text-slate-600 h-[44px] w-[44px]"
-          title="Open Filters"
-        >
-          <Filter size={18} />
-        </button>
-      </div>
-
-      {/* Listing (Table for desktop, Cards for mobile) */}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        {/* Desktop Table */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                <th className="px-6 py-3.5">Order ID</th>
-                <th className="px-5 py-3.5">Client Company</th>
-                <th className="px-5 py-3.5">City</th>
-                <th className="px-5 py-3.5">Sales Rep</th>
-                <th className="px-5 py-3.5">Order Value</th>
-                <th className="px-5 py-3.5">Status</th>
-                <th className="px-5 py-3.5">Quotations</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredOrders.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400 italic">No orders found.</td>
-                </tr>
-              ) : (
-                filteredOrders.map(order => (
-                  <tr
-                    key={order.id}
-                    onClick={() => setSelectedOrderId(order.id)}
-                    className="hover:bg-slate-50/50 cursor-pointer transition border-b-[6px] border-white bg-slate-50/30"
-                  >
-                    <td className="px-6 py-4 font-bold text-[#173c2d] text-sm">
-                      <div className="flex items-center gap-2">
-                        {order.id}
-                        {currentUserRole === "Owner" && (
-                          (order.status === "Order Placed with Supplier" && !order.deliveryPartner) ||
-                          (order.status === "Commissioning Pending" && !order.assignedEngineer)
-                        ) && (
-                          <span title="Action Required: Missing Assignment"><AlertTriangle size={14} className="text-amber-500" /></span>
-                        )}
-                        {currentUserRole === "Owner" && order.quotations.some(q => !q.approved) && (
-                          <span title="Quotation Pending Approval" className="h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse inline-block shrink-0" />
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 font-semibold text-slate-900 text-sm">
-                      <div>{order.companyName}</div>
-                      {/* Products Summary */}
-                      {order.productsSelected && order.productsSelected.length > 0 && (
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {order.productsSelected.map((prod, pIdx) => (
-                            <span key={pIdx} className="inline-flex items-center gap-1 rounded bg-slate-105 px-1.5 py-0.5 text-[9px] text-slate-500 font-semibold border border-slate-200">
-                              {prod.productName} (x{prod.quantity})
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-5 py-4 text-slate-600 text-sm">{order.city}</td>
-                    <td className="px-5 py-4 text-slate-600 text-sm">{order.salesperson}</td>
-                    <td className="px-5 py-4 font-bold text-slate-905 text-sm">
-                      ₹{(order.orderValue || 0).toLocaleString()}
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border ${getStatusColor(order.status)}`}>
-                        {order.status}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-slate-500 text-xs">
-                      {order.quotations.length} uploaded
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile Cards (Properly Separated) */}
-        <div className="block md:hidden space-y-4 bg-slate-100 p-3 rounded-2xl">
-          {filteredOrders.length === 0 ? (
-            <div className="px-5 py-8 text-center text-slate-400 italic bg-white rounded-xl border border-slate-200">No orders found.</div>
-          ) : (
-            filteredOrders.map(order => (
-              <div
-                key={order.id}
-                onClick={() => setSelectedOrderId(order.id)}
-                className="bg-white border-2 border-slate-200 p-4 rounded-xl shadow-md space-y-3 hover:bg-slate-50/50 hover:shadow-lg transition-all cursor-pointer"
-              >
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-[#173c2d] text-sm flex items-center gap-2">
-                    {order.id}
-                    {currentUserRole === "Owner" && (
-                      (order.status === "Order Placed with Supplier" && !order.deliveryPartner) ||
-                      (order.status === "Commissioning Pending" && !order.assignedEngineer)
-                    ) && (
-                      <span title="Action Required: Missing Assignment"><AlertTriangle size={14} className="text-amber-500" /></span>
-                    )}
-                    {currentUserRole === "Owner" && order.quotations.some(q => !q.approved) && (
-                      <span title="Quotation Pending Approval" className="h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse inline-block shrink-0" />
-                    )}
-                  </span>
-                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border ${getStatusColor(order.status)}`}>
-                    {order.status}
-                  </span>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-slate-900 text-sm">{order.companyName}</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">{order.city} · {order.salesperson}</p>
-                  {/* Products Summary */}
-                  {order.productsSelected && order.productsSelected.length > 0 && (
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {order.productsSelected.map((prod, pIdx) => (
-                        <span key={pIdx} className="inline-flex items-center gap-1 rounded bg-slate-105 px-1.5 py-0.5 text-[9px] text-slate-500 font-semibold border border-slate-200">
-                          {prod.productName} (x{prod.quantity})
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="text-[10px] text-slate-450 pt-2 border-t flex justify-between">
-                  <span>Value: <strong className="text-slate-800">₹{(order.orderValue || 0).toLocaleString()}</strong></span>
-                  <span>Files: {order.quotations.length} uploaded</span>
-                </div>
+          {/* Cards List Layout */}
+          <div className="space-y-3.5">
+            {filteredOrders.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 italic text-xs bg-white rounded-xl border">
+                No orders found matching current search filters.
               </div>
-            ))
+            ) : (
+              filteredOrders.map(order => (
+                <div
+                  key={order.id}
+                  onClick={() => setSelectedOrderId(order.id)}
+                  className="bg-white border border-slate-200/80 p-4 rounded-xl shadow-sm hover:shadow-md hover:bg-slate-55/20 transition-all cursor-pointer space-y-3"
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-[#173c2d] text-sm">{order.id}</span>
+                      {currentUserRole === "Owner" && (
+                        (order.status === "Order Placed with Supplier" && !order.deliveryPartner) ||
+                        (order.status === "Commissioning Pending" && !order.assignedEngineer)
+                      ) && (
+                        <span title="Action Required: Missing Assignment"><AlertTriangle size={14} className="text-amber-500" /></span>
+                      )}
+                    </div>
+                    <div onClick={e => e.stopPropagation()}>
+                      {canWrite ? (
+                        <select
+                          value={order.status}
+                          onClick={e => e.stopPropagation()}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            const newStatus = e.target.value as Order["status"];
+                            if (newStatus === "Commissioned/Completed" && !order.gstNumber) {
+                              alert("GST Number is compulsory before Commissioning. Open details page to verify.");
+                              return;
+                            }
+                            if (newStatus === "Commissioning Pending") {
+                              if (currentUserRole === "Service Engineer") {
+                                updateOrderStatus(order.id, "Commissioning Pending");
+                              } else {
+                                setSelectedOrderId(order.id);
+                                setIsAssignOpen(true);
+                              }
+                            } else if (newStatus === "Order Placed with Supplier") {
+                              setSelectedOrderId(order.id);
+                              setSelectedSupplierId(order.supplierId || "");
+                              setSelectedDeliveryPartner(order.deliveryPartner || "");
+                              setIsSupplierModalOpen(true);
+                            } else {
+                              updateOrderStatus(order.id, newStatus);
+                            }
+                          }}
+                          className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold cursor-pointer outline-none appearance-none ${getStatusColor(order.status)}`}
+                          style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
+                        >
+                          {currentUserRole === "Service Engineer" ? (
+                            <>
+                              {order.status !== "Commissioning Pending" && order.status !== "Commissioned/Completed" && (
+                                <option value={order.status} disabled>{order.status}</option>
+                              )}
+                              <option value="Commissioning Pending">Commissioning Pending</option>
+                              <option value="Commissioned/Completed">Commissioned/Completed</option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="In Process">In Process</option>
+                              <option value="Payment Pending">Payment Pending</option>
+                              <option value="Order Placed with Supplier">Order Placed with Supplier</option>
+                              <option value="Commissioning Pending">Commissioning Pending</option>
+                              <option value="Commissioned/Completed">Commissioned/Completed</option>
+                            </>
+                          )}
+                        </select>
+                      ) : (
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold border ${getStatusColor(order.status)}`}>
+                          {order.status}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-y-1.5 gap-x-3 text-xs text-slate-500/90 font-medium">
+                    <div className="col-span-2">Company: <span className="text-slate-805 font-bold">{order.companyName}</span></div>
+                    <div>City: <span className="text-slate-800">{order.city || "-"}</span></div>
+                    <div>Salesperson: <span className="text-slate-800">{order.salesperson || "-"}</span></div>
+                    <div className="col-span-2 flex justify-between pt-1 text-[11px] text-slate-500 border-t mt-1">
+                      <span>Value: <strong className="text-slate-800">₹{(order.orderValue || 0).toLocaleString()}</strong></span>
+                      <span>Docs: {order.quotations.length} files</span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Floating Action Button */}
+          {canWrite && (
+            <button
+              onClick={handleOpenAddOrder}
+              className="fixed bottom-6 right-6 h-12 w-12 rounded-full bg-[#173c2d] text-white flex items-center justify-center shadow-lg hover:bg-[#204a3b] transition-all transform hover:scale-105 z-30"
+              title="Manual Add Order"
+            >
+              <Plus size={20} strokeWidth={2.5} />
+            </button>
           )}
-        </div>
-      </div>
+        </section>
+      )}
 
       {/* Filter Modal */}
       {isFilterModalOpen && (
@@ -1604,6 +1513,6 @@ export const OrdersPage: React.FC = () => {
         fileName={previewFileName} 
         onClose={() => setPreviewFileName(null)} 
       />
-    </section>
+    </>
   );
 };

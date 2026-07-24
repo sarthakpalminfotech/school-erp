@@ -20,7 +20,9 @@ export interface Lead {
   address: string;
   city: string;
   branch: string;
-  status: "In Process" | "Unavailable" | "Postponed" | "Lost" | "Disqualified" | "Win" | "Converted";
+  status: "New" | "In Quotation" | "In Discussion" | "Win" | "Lost" | "Disqualified" | "Converted";
+  substatus?: string;
+  convertedAt?: string;
   statusReason?: string; // reason for Lost, Disqualified, Unavailable
   followUpDate?: string; // for Postponed / Follow-up Needed
   notes: Note[];
@@ -30,6 +32,19 @@ export interface Lead {
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface QuotationRequest {
+  id: string;
+  leadId?: string;
+  orderId?: string;
+  requestedTypes: string[];
+  notes?: string;
+  photo?: string;
+  voiceNote?: string;
+  requestedBy: string;
+  requestedAt: string;
+  resolved: boolean;
 }
 
 export interface Note {
@@ -160,6 +175,27 @@ export interface TimelineLog {
   timestamp: string;
 }
 
+export interface Visit {
+  id: string;
+  companyName: string;
+  contactPerson?: string;
+  phone?: string;
+  city?: string;
+  address?: string;
+  branch?: string;
+  productsSelected?: LeadProduct[];
+  salesperson?: string;
+  status: 'Pending' | 'Started' | 'In communication' | 'Unavailable' | 'Postponed' | 'Disqualified' | 'Convert to lead' | 'Lost';
+  scheduledAt?: string;
+  startTime?: string;
+  startLocation?: { lat: number; lng: number };
+  followUpDate?: string;
+  reason?: string;
+  notes: Note[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Master types
 export interface ProductMaster { id: string; name: string; model?: string; hp?: number; price?: number; }
 export interface PartsMaster { id: string; name: string; price: number; threshold?: number; }
@@ -188,6 +224,8 @@ interface AppContextType {
   payments: PaymentLedger[];
   serviceCycles: ServiceCycle[];
   timelineLogs: TimelineLog[];
+  visits: Visit[];
+  quotationRequests: QuotationRequest[];
   // Masters
   products: ProductMaster[];
   partsMaster: PartsMaster[];
@@ -196,7 +234,7 @@ interface AppContextType {
   cities: string[];
 
   // Actions
-  addLead: (lead: Omit<Lead, "id" | "createdAt" | "updatedAt" | "notes" | "productsSelected"> & { productsSelected?: LeadProduct[], reason?: string, followUpDate?: string, createdAt?: string }) => Promise<void>;
+  addLead: (lead: Omit<Lead, "id" | "createdAt" | "updatedAt" | "notes" | "productsSelected"> & { productsSelected?: LeadProduct[], reason?: string, followUpDate?: string, createdAt?: string, gstNumber?: string, convertedAt?: string, substatus?: string }) => Promise<void>;
   updateLead: (id: string, updates: {
     company?: string;
     contact?: string;
@@ -209,7 +247,7 @@ interface AppContextType {
     productsSelected?: LeadProduct[];
     createdAt?: string;
   }) => Promise<void>;
-  updateLeadStatus: (id: string, status: Lead["status"], reason?: string, followUpDate?: string) => Promise<void>;
+  updateLeadStatus: (id: string, status: Lead["status"], reason?: string, followUpDate?: string, substatus?: string) => Promise<void>;
   addNoteToLead: (leadId: string, noteText: string, photo?: string, voiceNote?: string) => Promise<void>;
   addOrder: (order: Omit<Order, "createdAt" | "updatedAt" | "quotations">) => Promise<void>;
   updateOrderStatus: (id: string, status: Order["status"], assignedEngineer?: string) => Promise<void>;
@@ -241,8 +279,17 @@ interface AppContextType {
   uploadServiceQuotation: (orderId: string, fileName: string) => Promise<void>;
   uploadServiceReport: (orderId: string, type: "Checkup" | "Pre-Service" | "Post-Service", file: File) => Promise<void>;
   deleteServiceReport: (orderId: string, reportId: string) => Promise<void>;
+  addQuotationRequest: (req: Omit<QuotationRequest, "id" | "requestedAt" | "resolved" | "requestedBy">) => Promise<void>;
+  resolveQuotationRequest: (requestId: string) => Promise<void>;
   assignServiceTrackEngineer: (orderId: string, track: "Checkup" | "Major", engineerName: string | null) => Promise<void>;
   logTimeline: (orderId: string, action: string) => Promise<void>;
+
+  addVisit: (visitData: Omit<Visit, "id" | "createdAt" | "updatedAt" | "notes" | "status"> & { notesText?: string }) => Promise<void>;
+  startVisit: (id: string) => Promise<void>;
+  logVisit: (id: string, outcomeData: { status: Visit["status"]; notesText?: string; photo?: string; voiceNote?: string; followUpDate?: string; reason?: string }) => Promise<void>;
+  updateVisitStatus: (id: string, status: Visit["status"], outcomeData?: { notesText?: string; photo?: string; voiceNote?: string; followUpDate?: string; reason?: string }) => Promise<void>;
+  updateVisit: (id: string, updates: Partial<Omit<Visit, "id" | "createdAt" | "updatedAt" | "notes" | "status">>) => Promise<void>;
+  addNoteToVisit: (visitId: string, noteText: string, photo?: string, voiceNote?: string) => Promise<void>;
 
   hasReadPermission: (moduleName: string) => boolean;
   hasWritePermission: (moduleName: string) => boolean;
@@ -281,6 +328,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [payments, setPayments] = useState<PaymentLedger[]>([]);
   const [serviceCycles, setServiceCycles] = useState<ServiceCycle[]>([]);
   const [timelineLogs, setTimelineLogs] = useState<TimelineLog[]>([]);
+  const [visits, setVisits] = useState<Visit[]>([]);
+  const [quotationRequests, setQuotationRequests] = useState<QuotationRequest[]>([]);
 
   // Masters
   const [products, setProducts] = useState<ProductMaster[]>([]);
@@ -326,7 +375,9 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         { data: dbPayEntries, error: errPayEntries },
         { data: dbServiceCycles, error: errServiceCycles },
         { data: dbServiceReports, error: errServiceReports },
-        { data: dbTimelineLogs, error: errTimelineLogs }
+        { data: dbTimelineLogs, error: errTimelineLogs },
+        { data: dbVisits, error: errVisits },
+        { data: dbQuotationRequests, error: errQuotationRequests }
       ] = await Promise.all([
         supabase.from("cities").select("*"),
         supabase.from("employee_master").select("*"),
@@ -344,7 +395,9 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         supabase.from("payment_entries").select("*").order("date", { ascending: true }),
         supabase.from("service_cycles").select("*"),
         supabase.from("service_reports").select("*"),
-        supabase.from("timeline_logs").select("*").order("timestamp", { ascending: false })
+        supabase.from("timeline_logs").select("*").order("timestamp", { ascending: false }),
+        supabase.from("visits").select("*").order("created_at", { ascending: false }),
+        supabase.from("quotation_requests").select("*").order("requested_at", { ascending: false })
       ]);
 
       if (
@@ -352,13 +405,13 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         errProductMaster || errInventory || errCustomers || errLeads || 
         errNotes || errOrders || errQuotations || errComplaints || 
         errLedgers || errPayEntries || errServiceCycles || errServiceReports || 
-        errTimelineLogs
+        errTimelineLogs || errVisits || errQuotationRequests
       ) {
         console.error("Error loading data from Supabase:", {
           errCities, errEmployees, errSuppliers, errPartsMaster, errProductMaster,
           errInventory, errCustomers, errLeads, errNotes, errOrders, errQuotations,
           errComplaints, errLedgers, errPayEntries, errServiceCycles, errServiceReports,
-          errTimelineLogs
+          errTimelineLogs, errVisits, errQuotationRequests
         });
         return;
       }
@@ -370,6 +423,21 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (dbProductMaster) setProducts(dbProductMaster as ProductMaster[]);
       if (dbInventory) setInventory(dbInventory as Part[]);
       if (dbCustomers) setCustomers(dbCustomers.map((c: any) => ({ ...c, contactPerson: c.contact_person, gstNumber: c.gst_number })) as Customer[]);
+
+      if (dbQuotationRequests) {
+        setQuotationRequests(dbQuotationRequests.map((q: any) => ({
+          id: q.id,
+          leadId: q.lead_id || undefined,
+          orderId: q.order_id || undefined,
+          requestedTypes: q.requested_types || [],
+          notes: q.notes || undefined,
+          photo: q.photo || undefined,
+          voiceNote: q.voice_note || undefined,
+          requestedBy: q.requested_by,
+          requestedAt: q.requested_at,
+          resolved: q.resolved
+        })));
+      }
 
       // Map notes to leads
       if (dbLeads && dbNotes) {
@@ -394,6 +462,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             city: l.city,
             branch: l.branch || "Main",
             status: l.status,
+            substatus: l.substatus || undefined,
+            convertedAt: l.converted_at || undefined,
             statusReason: l.status_reason || undefined,
             followUpDate: l.follow_up_date || undefined,
             notes: leadNotes,
@@ -554,6 +624,43 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           timestamp: l.timestamp
         })));
       }
+
+      // Map visits
+      if (dbVisits && dbNotes) {
+        const mappedVisits: Visit[] = dbVisits.map((v: any) => {
+          const visitNotes = dbNotes
+            .filter((n: any) => n.visit_id === v.id)
+            .map((n: any) => ({
+              id: n.id,
+              text: n.text,
+              photo: n.photo || undefined,
+              voiceNote: n.voice_note || undefined,
+              timestamp: n.timestamp,
+              user: n.username
+            }));
+          return {
+            id: v.id,
+            companyName: v.company_name,
+            contactPerson: v.contact_person || undefined,
+            phone: v.phone || undefined,
+            city: v.city || undefined,
+            address: v.address || undefined,
+            branch: v.branch || undefined,
+            productsSelected: v.products_selected || [],
+            salesperson: v.salesperson || undefined,
+            status: v.status,
+            scheduledAt: v.scheduled_at || undefined,
+            startTime: v.start_time || undefined,
+            startLocation: v.start_location || undefined,
+            followUpDate: v.follow_up_date || undefined,
+            reason: v.reason || undefined,
+            notes: visitNotes,
+            createdAt: v.created_at,
+            updatedAt: v.updated_at
+          };
+        });
+        setVisits(mappedVisits);
+      }
     } catch (err) {
       console.error("Failed to load live data from Supabase:", err);
     }
@@ -584,7 +691,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // 1. Add Lead
-  const addLead = async (leadData: Omit<Lead, "id" | "createdAt" | "updatedAt" | "notes" | "productsSelected"> & { productsSelected?: LeadProduct[], reason?: string, followUpDate?: string, createdAt?: string, gstNumber?: string }) => {
+  const addLead = async (leadData: Omit<Lead, "id" | "createdAt" | "updatedAt" | "notes" | "productsSelected"> & { productsSelected?: LeadProduct[], reason?: string, followUpDate?: string, createdAt?: string, gstNumber?: string, convertedAt?: string, substatus?: string }) => {
     const leadId = `L-${Date.now()}`;
     const { error } = await supabase.from("leads").insert({
       id: leadId,
@@ -596,9 +703,11 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       city: leadData.city || null,
       branch: leadData.branch,
       status: leadData.status,
+      substatus: leadData.substatus || null,
       products_selected: leadData.productsSelected || [],
       created_by: currentSimulatedUser,
       created_at: leadData.createdAt || new Date().toISOString(),
+      converted_at: leadData.convertedAt || null,
       status_reason: leadData.reason || null,
       follow_up_date: leadData.followUpDate || null,
       gst_number: leadData.gstNumber || null
@@ -658,7 +767,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // 2. Update Lead Status
-  const updateLeadStatus = async (id: string, status: Lead["status"], reason?: string, followUpDate?: string) => {
+  const updateLeadStatus = async (id: string, status: Lead["status"], reason?: string, followUpDate?: string, substatus?: string) => {
     const lead = leads.find(l => l.id === id);
     if (!lead) return;
 
@@ -735,6 +844,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } else {
       const { error } = await supabase.from("leads").update({
         status,
+        substatus: substatus || null,
         status_reason: reason || null,
         follow_up_date: followUpDate || null,
         updated_at: new Date().toISOString()
@@ -743,6 +853,39 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         console.error("Error updating lead status:", error);
         alert("Error updating lead status: " + error.message);
       }
+    }
+    await refreshData();
+  };
+
+  // 2b. Add Quotation Request
+  const addQuotationRequest = async (req: Omit<QuotationRequest, "id" | "requestedAt" | "resolved" | "requestedBy">) => {
+    const { error } = await supabase.from("quotation_requests").insert({
+      id: `qr-${Date.now()}`,
+      lead_id: req.leadId || null,
+      order_id: req.orderId || null,
+      requested_types: req.requestedTypes,
+      notes: req.notes || null,
+      photo: req.photo || null,
+      voice_note: req.voiceNote || null,
+      requested_by: currentSimulatedUser,
+      requested_at: new Date().toISOString(),
+      resolved: false
+    });
+    if (error) {
+      console.error("Error creating quotation request:", error);
+      alert("Error requesting quotation: " + error.message);
+    }
+    await refreshData();
+  };
+
+  // 2c. Resolve Quotation Request
+  const resolveQuotationRequest = async (requestId: string) => {
+    const { error } = await supabase
+      .from("quotation_requests")
+      .update({ resolved: true })
+      .eq("id", requestId);
+    if (error) {
+      console.error("Error resolving quotation request:", error);
     }
     await refreshData();
   };
@@ -1473,7 +1616,184 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     await refreshData();
   };
 
+  const addVisit = async (visitData: Omit<Visit, "id" | "createdAt" | "updatedAt" | "notes" | "status"> & { notesText?: string }) => {
+    const visitId = `V-${Date.now()}`;
+    const { error } = await supabase.from("visits").insert({
+      id: visitId,
+      company_name: visitData.companyName,
+      contact_person: visitData.contactPerson || null,
+      phone: visitData.phone || null,
+      city: visitData.city || null,
+      address: visitData.address || null,
+      branch: visitData.branch || null,
+      products_selected: visitData.productsSelected || [],
+      salesperson: visitData.salesperson || currentSimulatedUser,
+      status: 'Pending',
+      scheduled_at: visitData.scheduledAt || null
+    });
+    if (error) {
+      console.error("Error creating visit:", error);
+      alert("Error creating visit: " + error.message);
+      return;
+    }
+
+    if (visitData.notesText?.trim()) {
+      await addNoteToVisit(visitId, visitData.notesText.trim());
+    }
+
+    await refreshData();
+  };
+
+  const startVisit = async (id: string) => {
+    let location: any = null;
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+      });
+      location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    } catch (e) {
+      console.warn("Could not retrieve geolocation:", e);
+    }
+
+    const { error } = await supabase
+      .from("visits")
+      .update({
+        status: 'Started',
+        start_time: new Date().toISOString(),
+        start_location: location,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error starting visit:", error);
+      alert("Error starting visit: " + error.message);
+    }
+    await refreshData();
+  };
+
+  const logVisit = async (id: string, outcomeData: { status: Visit["status"]; notesText?: string; photo?: string; voiceNote?: string; followUpDate?: string; reason?: string }) => {
+    const { error } = await supabase
+      .from("visits")
+      .update({
+        status: outcomeData.status,
+        follow_up_date: outcomeData.followUpDate || null,
+        reason: outcomeData.reason || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error logging outcome:", error);
+      alert("Error logging outcome: " + error.message);
+      return;
+    }
+
+    if (outcomeData.notesText?.trim()) {
+      await addNoteToVisit(id, outcomeData.notesText.trim(), outcomeData.photo, outcomeData.voiceNote);
+    }
+
+    if (outcomeData.status === "Convert to lead") {
+      const visit = visits.find(v => v.id === id);
+      if (visit) {
+        await addLead({
+          company: visit.companyName,
+          contact: visit.contactPerson,
+          phone: visit.phone || "",
+          salesperson: visit.salesperson || currentSimulatedUser,
+          address: visit.address || "",
+          city: visit.city || "Ahmedabad",
+          branch: visit.branch || "Main",
+          status: "New",
+          productsSelected: visit.productsSelected || [],
+          reason: outcomeData.reason || undefined,
+          followUpDate: outcomeData.followUpDate || undefined
+        });
+      }
+    }
+
+    await refreshData();
+  };
+
+  const updateVisitStatus = async (id: string, status: Visit["status"], outcomeData?: { notesText?: string; photo?: string; voiceNote?: string; followUpDate?: string; reason?: string }) => {
+    const { error } = await supabase
+      .from("visits")
+      .update({
+        status: status,
+        follow_up_date: outcomeData?.followUpDate || null,
+        reason: outcomeData?.reason || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error updating status:", error);
+      alert("Error updating status: " + error.message);
+      return;
+    }
+
+    if (outcomeData?.notesText?.trim()) {
+      await addNoteToVisit(id, outcomeData.notesText.trim(), outcomeData.photo, outcomeData.voiceNote);
+    }
+
+    if (status === "Convert to lead") {
+      const visit = visits.find(v => v.id === id);
+      if (visit) {
+        await addLead({
+          company: visit.companyName,
+          contact: visit.contactPerson,
+          phone: visit.phone || "",
+          salesperson: visit.salesperson || currentSimulatedUser,
+          address: visit.address || "",
+          city: visit.city || "Ahmedabad",
+          branch: visit.branch || "Main",
+          status: "New",
+          productsSelected: visit.productsSelected || [],
+          reason: outcomeData?.reason || undefined,
+          followUpDate: outcomeData?.followUpDate || undefined
+        });
+      }
+    }
+
+    await refreshData();
+  };
+
+  const updateVisit = async (id: string, updates: Partial<Omit<Visit, "id" | "createdAt" | "updatedAt" | "notes" | "status">>) => {
+    const dbUpdates: any = {};
+    if (updates.companyName !== undefined) dbUpdates.company_name = updates.companyName;
+    if (updates.contactPerson !== undefined) dbUpdates.contact_person = updates.contactPerson;
+    if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+    if (updates.city !== undefined) dbUpdates.city = updates.city;
+    if (updates.address !== undefined) dbUpdates.address = updates.address;
+    if (updates.branch !== undefined) dbUpdates.branch = updates.branch;
+    if (updates.productsSelected !== undefined) dbUpdates.products_selected = updates.productsSelected;
+    if (updates.salesperson !== undefined) dbUpdates.salesperson = updates.salesperson;
+    if (updates.scheduledAt !== undefined) dbUpdates.scheduled_at = updates.scheduledAt;
+
+    dbUpdates.updated_at = new Date().toISOString();
+
+    const { error } = await supabase.from("visits").update(dbUpdates).eq("id", id);
+    if (error) {
+      console.error("Error updating visit:", error);
+      alert("Error updating visit: " + error.message);
+    }
+    await refreshData();
+  };
+
+  const addNoteToVisit = async (visitId: string, noteText: string, photo?: string, voiceNote?: string) => {
+    await supabase.from("notes").insert({
+      id: `n-${Date.now()}`,
+      visit_id: visitId,
+      text: noteText,
+      photo: photo || null,
+      voice_note: voiceNote || null,
+      username: currentUserRole === "Owner" ? "Karan Desai (Owner)" : currentUserRole
+    });
+    await refreshData();
+  };
+
   const hasReadPermission = (moduleName: string): boolean => {
+    if (moduleName === "Visits") return true;
     if (currentSimulatedUser === "Owner") return true;
     const emp = employees.find(e => e.name === currentSimulatedUser);
     if (!emp) return false;
@@ -1482,6 +1802,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const hasWritePermission = (moduleName: string): boolean => {
+    if (moduleName === "Visits") return true;
     if (currentSimulatedUser === "Owner") return true;
     const emp = employees.find(e => e.name === currentSimulatedUser);
     if (!emp) return false;
@@ -1579,6 +1900,17 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return timelineLogs;
   }, [timelineLogs, orders, currentSimulatedUser, employees]);
 
+  const visibleVisits = React.useMemo(() => {
+    const activeVisits = visits.filter(v => v.status !== "Convert to lead");
+    if (currentSimulatedUser === "Owner") return activeVisits;
+    const emp = employees.find(e => e.name === currentSimulatedUser);
+    if (!emp) return activeVisits.filter(v => v.salesperson === currentSimulatedUser);
+    if (emp.role === "Sales Person") {
+      return activeVisits.filter(v => v.salesperson === currentSimulatedUser);
+    }
+    return activeVisits;
+  }, [visits, currentSimulatedUser, employees]);
+
   if (loading) {
     return (
       <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0e1613] text-white space-y-4">
@@ -1603,6 +1935,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       payments: visiblePayments,
       serviceCycles: visibleServiceCycles,
       timelineLogs: visibleTimelineLogs,
+      visits: visibleVisits,
+      quotationRequests,
       products,
       partsMaster,
       suppliers,
@@ -1614,7 +1948,9 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       addInventoryStock, addPayment, togglePaymentComplete,
       completeServiceCheckup, completeMajorService, uploadServiceQuotation,
       uploadServiceReport, deleteServiceReport, assignServiceTrackEngineer,
+      addQuotationRequest, resolveQuotationRequest,
       logTimeline,
+      addVisit, startVisit, logVisit, updateVisitStatus, updateVisit, addNoteToVisit,
       saveProductMaster, deleteProductMaster,
       savePartsMaster, deletePartsMaster,
       saveSupplierMaster, deleteSupplierMaster,
