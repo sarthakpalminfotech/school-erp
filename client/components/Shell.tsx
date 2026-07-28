@@ -19,7 +19,7 @@ interface ShellProps {
 export const Shell: React.FC<ShellProps> = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
-  const { currentUserRole, setCurrentUserRole, currentSimulatedUser, setCurrentSimulatedUser, employees, complaints, inventory, hasReadPermission, orders, visits } = useAppState();
+  const { currentUserRole, setCurrentUserRole, currentSimulatedUser, setCurrentSimulatedUser, employees, complaints, inventory, hasReadPermission, orders, visits, leads } = useAppState();
 
   const hasUpcomingVisit = React.useMemo(() => {
     const now = new Date();
@@ -33,13 +33,14 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
 
   const navigation = [
     { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
-    { label: "Leads", to: "/", icon: ClipboardList },
+    { label: "Visits", to: "/visits", icon: CalendarClock, alert: hasUpcomingVisit },
+    { label: "Leads", to: "/", icon: ClipboardList, alert: currentUserRole === "Owner" && leads.some(l => l.quotations?.some(q => !q.approved)) },
     { label: "Orders", to: "/orders", icon: FileText, alert: currentUserRole === "Owner" && orders.some(o => o.quotations.some(q => !q.approved)) },
+    { label: "Customers", to: "/customers", icon: Users },
     { label: "Service Management", to: "/service", icon: Wrench },
     { label: "Complaints", to: "/complaints", icon: CircleHelp, count: complaints.filter(c => c.status !== "Resolved/Closed").length },
     { label: "Inventory", to: "/inventory", icon: Box, alert: inventory.some(p => p.quantity <= p.threshold) },
     { label: "Payment Ledger", to: "/ledger", icon: CreditCard },
-    { label: "Visits", to: "/visits", icon: CalendarClock, alert: hasUpcomingVisit },
   ];
 
   const filteredNavigation = navigation.filter(item => {
@@ -75,6 +76,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         return "Leads";
       case "/orders":
         return "Orders";
+      case "/customers":
+        return "Customers";
       case "/service":
         return "Service Management";
       case "/complaints":

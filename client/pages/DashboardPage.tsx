@@ -439,17 +439,27 @@ export const DashboardPage: React.FC = () => {
                 {leads.filter(l => l.followUpDate).length === 0 ? (
                   <p className="text-xs text-slate-400 italic text-center py-6">No scheduled follow-up reminders found.</p>
                 ) : (
-                  leads.filter(l => l.followUpDate).map(l => (
-                    <div key={l.id} className="flex justify-between items-center p-3 border rounded-xl text-xs bg-slate-50/50 hover:bg-slate-50 transition">
-                      <div>
-                        <strong className="text-slate-800">{l.company}</strong>
-                        <p className="text-[10px] text-slate-400">{l.contact} · {l.phone}</p>
+                  leads.filter(l => l.followUpDate).map(l => {
+                    const latestAlertNote = l.notes.find(n => n.text.startsWith("[Follow Up Alert]"));
+                    return (
+                      <div key={l.id} className="flex justify-between items-center p-3 border rounded-xl text-xs bg-slate-50/50 hover:bg-slate-50 transition">
+                        <div>
+                          <strong className="text-slate-800">{l.company}</strong>
+                          <p className="text-[10px] text-slate-400">{l.contact} · {l.phone}</p>
+                          {latestAlertNote && (
+                            <p className="text-[11px] text-slate-600 mt-1 italic">
+                              {latestAlertNote.text.replace("[Follow Up Alert]", "").trim()}
+                              {latestAlertNote.photo && " 📸"}
+                              {latestAlertNote.voiceNote && " 🎤"}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right text-amber-700 font-semibold">
+                          {new Date(l.followUpDate!).toLocaleString()}
+                        </div>
                       </div>
-                      <div className="text-right text-amber-700 font-semibold">
-                        {new Date(l.followUpDate!).toLocaleString()}
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>

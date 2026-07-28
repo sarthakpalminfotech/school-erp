@@ -37,6 +37,20 @@ export const MastersPage: React.FC = () => {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [selectedCustDetails, setSelectedCustDetails] = useState<Customer | null>(null);
+  const [selectedBranchProfile, setSelectedBranchProfile] = useState<string | null>(null);
+
+  const displayDetails = useMemo(() => {
+    if (!selectedCustDetails) return null;
+    if (!selectedBranchProfile) return selectedCustDetails;
+    
+    const bDetail = selectedCustDetails.branchDetails?.find(b => b.name === selectedBranchProfile);
+    return {
+      ...selectedCustDetails,
+      contactPerson: bDetail?.contactPerson || selectedCustDetails.contactPerson,
+      phone: bDetail?.phone || selectedCustDetails.phone,
+      address: bDetail?.address || selectedCustDetails.address,
+    };
+  }, [selectedCustDetails, selectedBranchProfile]);
 
   // --- Dynamic Form States ---
   // Products
@@ -226,7 +240,6 @@ export const MastersPage: React.FC = () => {
     { key: "parts", label: "Spare Parts", icon: Box, count: partsMaster.length },
     { key: "suppliers", label: "Suppliers", icon: Truck, count: suppliers.length },
     { key: "employees", label: "Employees", icon: Briefcase, count: employees.length },
-    { key: "customers", label: "Customers", icon: Users, count: customers.length },
     { key: "cities", label: "Cities", icon: MapPin, count: cities.length },
   ];
 
@@ -441,7 +454,7 @@ export const MastersPage: React.FC = () => {
 
               {/* Customers Render */}
               {activeTab === "customers" && filteredCustomers.map(c => (
-                <tr key={c.id} onClick={() => setSelectedCustDetails(c)} className="hover:bg-slate-50/50 transition text-sm cursor-pointer">
+                <tr key={c.id} onClick={() => { setSelectedCustDetails(c); setSelectedBranchProfile(null); }} className="hover:bg-slate-50/50 transition text-sm cursor-pointer">
                   <td className="px-6 py-4 font-bold text-slate-700 hidden sm:table-cell">{c.id}</td>
                   <td className="px-5 py-4 font-semibold text-slate-900">
                     <div className="flex flex-col">
@@ -744,7 +757,7 @@ export const MastersPage: React.FC = () => {
                   {selectedCustDetails.name}
                 </h3>
               </div>
-              <button onClick={() => setSelectedCustDetails(null)} className="rounded-lg p-1.5 hover:bg-slate-100 transition"><X size={16} /></button>
+              <button onClick={() => { setSelectedCustDetails(null); setSelectedBranchProfile(null); }} className="rounded-lg p-1.5 hover:bg-slate-100 transition"><X size={16} /></button>
             </div>
 
             <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
@@ -756,30 +769,33 @@ export const MastersPage: React.FC = () => {
                 </div>
                 <div>
                   <span className="block text-xs font-bold text-slate-400 uppercase">Contact Person</span>
-                  <span className="font-semibold text-slate-800">{selectedCustDetails.contactPerson || "N/A"}</span>
+                  <span className="font-semibold text-slate-800">{displayDetails?.contactPerson || "N/A"}</span>
                 </div>
                 <div>
                   <span className="block text-xs font-bold text-slate-400 uppercase">Phone Number</span>
-                  <span className="font-semibold text-slate-800">{selectedCustDetails.phone || "N/A"}</span>
+                  <span className="font-semibold text-slate-800">{displayDetails?.phone || "N/A"}</span>
                 </div>
                 <div>
                   <span className="block text-xs font-bold text-slate-400 uppercase">City / Location</span>
-                  <span className="font-semibold text-slate-800">{selectedCustDetails.city || "N/A"}</span>
+                  <span className="font-semibold text-slate-800">{displayDetails?.city || "N/A"}</span>
                 </div>
                 <div className="col-span-2">
                   <span className="block text-xs font-bold text-slate-400 uppercase">Registered Address</span>
-                  <span className="text-slate-700">{selectedCustDetails.address || "N/A"}</span>
+                  <span className="text-slate-700">{displayDetails?.address || "N/A"}</span>
                 </div>
                 <div className="col-span-2">
                   <span className="block text-xs font-bold text-slate-400 uppercase">Registered Branches</span>
                   <div className="flex flex-wrap gap-1.5 mt-1">
-                    {selectedCustDetails.branches && selectedCustDetails.branches.length > 0 ? (
-                      selectedCustDetails.branches.map(br => (
-                        <span key={br} className="bg-slate-100 text-slate-700 text-xs px-2.5 py-0.5 rounded border">
-                          {br}
-                        </span>
-                      ))
-                    ) : (
+                    {selectedCustDetails.branches && selectedCustDetails.branches.map(br => (
+                      <span 
+                        key={br} 
+                        onClick={() => setSelectedBranchProfile(selectedBranchProfile === br ? null : br)}
+                        className={`text-xs px-2.5 py-0.5 rounded border cursor-pointer ${selectedBranchProfile === br ? 'bg-[#173c2d] text-white border-[#173c2d]' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                      >
+                        {br}
+                      </span>
+                    ))}
+                    {(!selectedCustDetails.branches || selectedCustDetails.branches.length === 0) && (
                       <span className="text-xs text-slate-400 italic">No custom branches added</span>
                     )}
                   </div>
@@ -810,25 +826,36 @@ export const MastersPage: React.FC = () => {
                           onClick={() => {
                             navigate(`/orders?orderId=${order.id}&search=${order.id}`);
                           }}
-                          className="flex items-center justify-between p-3 border rounded-xl hover:bg-slate-50 cursor-pointer transition"
+                          className="flex flex-col p-3 border rounded-xl hover:bg-slate-50 cursor-pointer transition gap-2"
                         >
-                          <div className="space-y-1">
-                            <span className="font-bold text-sm text-slate-900 hover:text-[#173c2d]">{order.id}</span>
-                            <div className="flex gap-2 text-xs text-slate-500">
-                              <span>Branch: <strong className="text-slate-750">{order.branch || "Main"}</strong></span>
-                              <span>•</span>
-                              <span>Value: <strong className="text-slate-750 font-bold">₹{(order.orderValue || 0).toLocaleString()}</strong></span>
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                              <span className="font-bold text-sm text-slate-900 hover:text-[#173c2d]">{order.id}</span>
+                              <div className="flex gap-2 text-xs text-slate-500">
+                                <span>Branch: <strong className="text-slate-750">{order.branch || "Main"}</strong></span>
+                                <span>•</span>
+                                <span>Value: <strong className="text-slate-750 font-bold">₹{(order.orderValue || 0).toLocaleString()}</strong></span>
+                              </div>
                             </div>
+                            <span className={`text-[11px] font-bold border px-2 py-0.5 rounded-full ${
+                                order.status === "Commissioned/Completed"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-250"
+                                  : order.status === "Payment Pending"
+                                  ? "bg-sky-50 text-sky-700 border-sky-200"
+                                  : "bg-slate-50 text-slate-750 border-slate-205"
+                            }`}>
+                              {order.status}
+                            </span>
                           </div>
-                          <span className={`text-[11px] font-bold border px-2 py-0.5 rounded-full ${
-                              order.status === "Commissioned/Completed"
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-250"
-                                : order.status === "Payment Pending"
-                                ? "bg-sky-50 text-sky-700 border-sky-200"
-                                : "bg-slate-50 text-slate-750 border-slate-205"
-                          }`}>
-                            {order.status}
-                          </span>
+                          {order.productsSelected && order.productsSelected.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              {order.productsSelected.map((prod, idx) => (
+                                <span key={idx} className="bg-[#173c2d]/10 text-[#173c2d] text-[10px] font-semibold px-2 py-0.5 rounded border border-[#173c2d]/20">
+                                  {prod.productName} ({prod.quantity})
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -838,7 +865,7 @@ export const MastersPage: React.FC = () => {
             </div>
 
             <div className="flex justify-end border-t p-4 bg-slate-50">
-              <Button type="button" onClick={() => setSelectedCustDetails(null)} className="bg-slate-800 hover:bg-slate-750 text-white text-xs rounded-lg px-4">
+              <Button type="button" onClick={() => { setSelectedCustDetails(null); setSelectedBranchProfile(null); }} className="bg-slate-800 hover:bg-slate-750 text-white text-xs rounded-lg px-4">
                 Close Profile
               </Button>
             </div>

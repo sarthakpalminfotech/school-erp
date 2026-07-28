@@ -9,6 +9,7 @@ import { ComplaintsPage } from "./ComplaintsPage";
 import { InventoryPage } from "./InventoryPage";
 import { LedgerPage } from "./LedgerPage";
 import { MastersPage } from "./MastersPage";
+import { CustomersPage } from "./CustomersPage";
 import { VisitsPage } from "./VisitsPage";
 import { useAppState } from "@/hooks/useAppState";
 import { ShieldAlert } from "lucide-react";
@@ -23,6 +24,8 @@ const Index: React.FC = () => {
         return "Leads";
       case "/orders":
         return "Orders";
+      case "/customers":
+        return "Customers";
       case "/service":
         return "Service";
       case "/complaints":
@@ -67,6 +70,8 @@ const Index: React.FC = () => {
         return <LeadsPage />;
       case "/orders":
         return <OrdersPage />;
+      case "/customers":
+        return <CustomersPage />;
       case "/service":
         return <ServicePage />;
       case "/complaints":

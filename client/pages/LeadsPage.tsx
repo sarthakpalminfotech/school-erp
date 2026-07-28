@@ -30,6 +30,8 @@ export const LeadsPage: React.FC = () => {
   const [followUpDateInput, setFollowUpDateInput] = useState("");
   const [followUpTimeInput, setFollowUpTimeInput] = useState("");
   const [followUpNoteInput, setFollowUpNoteInput] = useState("");
+  const [followUpPhoto, setFollowUpPhoto] = useState<string | null>(null);
+  const [followUpVoice, setFollowUpVoice] = useState<string | null>(null);
 
   // Ask for Quote Modal State
   const [isAskQuoteOpen, setIsAskQuoteOpen] = useState(false);
@@ -48,6 +50,8 @@ export const LeadsPage: React.FC = () => {
     setFollowUpDateInput("");
     setFollowUpTimeInput("");
     setFollowUpNoteInput("");
+    setFollowUpPhoto(null);
+    setFollowUpVoice(null);
     setIsFollowUpOpen(true);
   };
 
@@ -61,8 +65,8 @@ export const LeadsPage: React.FC = () => {
     if (targetLead) {
       await updateLeadStatus(followUpLeadId, targetLead.status, targetLead.statusReason, dateTime);
       
-      if (followUpNoteInput.trim()) {
-        await addNoteToLead(followUpLeadId, `[Follow Up Alert] ${followUpNoteInput}`);
+      if (followUpNoteInput.trim() || followUpPhoto || followUpVoice) {
+        await addNoteToLead(followUpLeadId, `[Follow Up Alert] ${followUpNoteInput}`, followUpPhoto || undefined, followUpVoice || undefined);
       }
     }
     
@@ -116,6 +120,18 @@ export const LeadsPage: React.FC = () => {
 
   // Lead Detail / Notes Drawer state
   const [selectedLeadDetails, setSelectedLeadDetails] = useState<Lead | null>(null);
+
+  // Keep selectedLeadDetails in sync with leads array
+  useEffect(() => {
+    if (selectedLeadDetails) {
+      const updated = leads.find(l => l.id === selectedLeadDetails.id);
+      if (updated && JSON.stringify(updated) !== JSON.stringify(selectedLeadDetails)) {
+        setSelectedLeadDetails(updated);
+      } else if (!updated) {
+        setSelectedLeadDetails(null);
+      }
+    }
+  }, [leads, selectedLeadDetails]);
 
   // Success alert state
   const [alertMsg, setAlertMsg] = useState("");
@@ -329,11 +345,20 @@ export const LeadsPage: React.FC = () => {
     setFollowUpDate("");
 
     if (targetStatus === "Win") {
-      setAlertMsg("Lead won! A new Customer and Order have been created. Redirecting to orders...");
-      setTimeout(() => {
-        setAlertMsg("");
-        navigate("/orders");
-      }, 2000);
+      if (currentUserRole === "Sales Person") {
+        setAlertMsg("Lead won! A new Customer and Order have been created. Returning to leads...");
+        setTimeout(() => {
+          setAlertMsg("");
+          setSelectedLeadDetails(null);
+          navigate("/");
+        }, 2000);
+      } else {
+        setAlertMsg("Lead won! A new Customer and Order have been created. Redirecting to orders...");
+        setTimeout(() => {
+          setAlertMsg("");
+          navigate("/orders");
+        }, 2000);
+      }
     }
   };
 
@@ -416,6 +441,29 @@ export const LeadsPage: React.FC = () => {
     <>
       {selectedLeadDetails ? (
         <div className="min-h-screen bg-slate-50 text-slate-800 px-4 py-5 space-y-5 animate-fadeIn">
+          {/* Scheduled Alert Banner */}
+          {selectedLeadDetails.followUpDate && new Date(selectedLeadDetails.followUpDate) > new Date() && (
+            <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg flex items-center justify-between">
+               <div className="flex flex-col">
+                 <span className="text-amber-800 font-bold text-xs flex items-center gap-1"><Bell size={14}/> Scheduled Alert</span>
+                 <span className="text-[10px] text-amber-700 font-semibold mt-0.5">{new Date(selectedLeadDetails.followUpDate).toLocaleString()}</span>
+                 {selectedLeadDetails.notes.find(n => n.text.startsWith("[Follow Up Alert]")) && (
+                    <span className="text-[11px] text-amber-800/80 mt-1 italic">Note: {selectedLeadDetails.notes.find(n => n.text.startsWith("[Follow Up Alert]"))?.text.replace("[Follow Up Alert]", "").trim()}</span>
+                 )}
+               </div>
+               <button 
+                 onClick={async () => {
+                   await updateLeadStatus(selectedLeadDetails.id, selectedLeadDetails.status, selectedLeadDetails.statusReason, undefined);
+                   const updated = leads.find(l => l.id === selectedLeadDetails.id);
+                   if (updated) setSelectedLeadDetails({...updated, followUpDate: undefined});
+                 }} 
+                 className="text-xs bg-amber-200/50 hover:bg-amber-200 text-amber-800 px-3 py-1.5 rounded font-semibold transition"
+               >
+                 Dismiss
+               </button>
+            </div>
+          )}
+
           {/* Top Bar Details */}
           <div className="flex items-center justify-between">
             <button onClick={() => setSelectedLeadDetails(null)} className="text-[#173c2d] font-semibold text-sm flex items-center gap-1">
@@ -584,7 +632,12 @@ export const LeadsPage: React.FC = () => {
 
           {/* Quotations & Documents Section */}
           <div className="border-t border-slate-200/80 pt-4 space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Quotations & Documents</h4>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              Quotations & Documents
+              {currentUserRole === "Owner" && selectedLeadDetails.quotations?.some(q => !q.approved) && (
+                <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" title="Pending Quotation Approval" />
+              )}
+            </h4>
             {canWrite && (
               <div className="flex items-center gap-2 bg-white border border-slate-200 p-2.5 rounded-xl shadow-sm">
                 <select
@@ -692,13 +745,23 @@ export const LeadsPage: React.FC = () => {
                           >
                             {quo.fileName}
                           </p>
-                          <p className="text-[9px] text-slate-400 mt-0.5 truncate">{quo.type} · {quo.fileSize}</p>
+                          <p className="text-[9px] text-slate-400 mt-0.5 truncate">{quo.type} · {new Date(quo.uploadedAt).toLocaleDateString('en-IN')} · {quo.uploadedBy.split(' (')[0]}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-bold border ${quo.approved ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-amber-50 text-amber-700 border-amber-100"}`}>
                           {quo.approved ? "Approved" : "Pending Approval"}
                         </span>
+                        {currentUserRole === "Owner" && (
+                          <button
+                            onClick={async () => {
+                              await toggleQuotationApproval(selectedLeadDetails.id, quo.id);
+                            }}
+                            className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${quo.approved ? "bg-white text-slate-600 border-slate-200 hover:bg-slate-50" : "bg-[#173c2d] text-white border-[#173c2d] hover:bg-[#204a3b]"}`}
+                          >
+                            {quo.approved ? "Unapprove" : "Approve"}
+                          </button>
+                        )}
                         {canWrite && (
                           <button
                             onClick={async () => {
@@ -864,6 +927,9 @@ export const LeadsPage: React.FC = () => {
                           {lead.company}
                           {hasUnresolved && (currentUserRole === "Owner" || currentUserRole === "Receptionist") && (
                             <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" title="Unresolved Quotation Request" />
+                          )}
+                          {currentUserRole === "Owner" && lead.quotations?.some(q => !q.approved) && (
+                            <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" title="Pending Quotation Approval" />
                           )}
                         </h3>
                       </div>
@@ -1489,6 +1555,30 @@ export const LeadsPage: React.FC = () => {
                     className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-[#5b8d65] resize-none"
                   />
                 </label>
+
+                {/* Attachments for Follow Up */}
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <div>
+                    <label className="text-[10px] text-slate-500 font-bold uppercase block mb-1">Attach Image Link</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. image.jpg"
+                      value={followUpPhoto || ""}
+                      onChange={e => setFollowUpPhoto(e.target.value || null)}
+                      className="w-full rounded border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#5b8d65]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500 font-bold uppercase block mb-1">Attach Voice Note</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 0:30"
+                      value={followUpVoice || ""}
+                      onChange={e => setFollowUpVoice(e.target.value || null)}
+                      className="w-full rounded border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#5b8d65]"
+                    />
+                  </div>
+                </div>
               </div>
               <div className="flex justify-end gap-2 border-t p-4 bg-slate-50">
                 <Button type="button" onClick={() => setIsFollowUpOpen(false)} variant="ghost" className="text-slate-600 text-xs rounded-lg">

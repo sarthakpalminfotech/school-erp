@@ -92,6 +92,13 @@ export interface Quotation {
   approved: boolean; // visual-only approval flag
 }
 
+export interface BranchDetail {
+  name: string;
+  contactPerson?: string;
+  phone?: string;
+  address?: string;
+}
+
 export interface Customer {
   id: string;
   name: string;
@@ -100,6 +107,7 @@ export interface Customer {
   city?: string;
   address?: string;
   branches?: string[];
+  branchDetails?: BranchDetail[];
   gstNumber?: string;
 }
 
@@ -181,18 +189,23 @@ export interface TimelineLog {
 
 export interface Visit {
   id: string;
+  visitType?: 'Sales' | 'Delivery' | 'Commissioning' | 'Service';
+  serviceType?: 'Checkup' | 'Major';
   companyName: string;
   contactPerson?: string;
   phone?: string;
   city?: string;
   address?: string;
   branch?: string;
+  orderId?: string;
+  supplierId?: string;
   productsSelected?: LeadProduct[];
   salesperson?: string;
-  status: 'Pending' | 'Started' | 'In communication' | 'Unavailable' | 'Postponed' | 'Disqualified' | 'Convert to lead' | 'Lost';
+  status: 'Pending' | 'Started' | 'In communication' | 'Unavailable' | 'Postponed' | 'Disqualified' | 'Convert to lead' | 'Lost' | 'Completed' | 'Issue Found';
   scheduledAt?: string;
   startTime?: string;
   startLocation?: { lat: number; lng: number };
+  startedBy?: string;
   followUpDate?: string;
   reason?: string;
   notes: Note[];
@@ -268,11 +281,12 @@ interface AppContextType {
     orderValue?: number;
     gstNumber?: string | null;
     deliveryDate?: string | null;
+    skipVisitCreation?: boolean;
   }) => Promise<void>;
   dismissOrderAlert: (orderId: string, alertType: "owner_reschedule" | "engineer_reschedule" | "engineer_assign") => Promise<void>;
   uploadQuotation: (parentId: string, type: Quotation["type"], file: File, isLead?: boolean) => Promise<void>;
-  toggleQuotationApproval: (orderId: string, quotationId: string) => Promise<void>;
-  deleteQuotation: (orderId: string, quotationId: string) => Promise<void>;
+  toggleQuotationApproval: (parentId: string, quotationId: string) => Promise<void>;
+  deleteQuotation: (parentId: string, quotationId: string) => Promise<void>;
   addNoteToOrder: (orderId: string, noteText: string, photo?: string, voiceNote?: string) => Promise<void>;
   logComplaint: (orderId: string, issue: string, photo?: string, voiceNote?: string) => Promise<void>;
   assignComplaint: (complaintId: string, engineerName: string) => Promise<void>;
@@ -428,7 +442,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (dbPartsMaster) setPartsMaster(dbPartsMaster as PartsMaster[]);
       if (dbProductMaster) setProducts(dbProductMaster as ProductMaster[]);
       if (dbInventory) setInventory(dbInventory as Part[]);
-      if (dbCustomers) setCustomers(dbCustomers.map((c: any) => ({ ...c, contactPerson: c.contact_person, gstNumber: c.gst_number })) as Customer[]);
+      if (dbCustomers) setCustomers(dbCustomers.map((c: any) => ({ ...c, contactPerson: c.contact_person, branchDetails: c.branch_details, gstNumber: c.gst_number })) as Customer[]);
 
       if (dbQuotationRequests) {
         setQuotationRequests(dbQuotationRequests.map((q: any) => ({
@@ -650,18 +664,23 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }));
           return {
             id: v.id,
+            visitType: v.visit_type || 'Sales',
+            serviceType: v.service_type || undefined,
             companyName: v.company_name,
             contactPerson: v.contact_person || undefined,
             phone: v.phone || undefined,
             city: v.city || undefined,
             address: v.address || undefined,
             branch: v.branch || undefined,
+            orderId: v.order_id || undefined,
             productsSelected: v.products_selected || [],
             salesperson: v.salesperson || undefined,
             status: v.status,
             scheduledAt: v.scheduled_at || undefined,
             startTime: v.start_time || undefined,
             startLocation: v.start_location || undefined,
+            supplierId: v.supplier_id || undefined,
+            startedBy: v.started_by || undefined,
             followUpDate: v.follow_up_date || undefined,
             reason: v.reason || undefined,
             notes: visitNotes,
@@ -683,6 +702,25 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setLoading(false);
     };
     init();
+
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+        },
+        (payload) => {
+          console.log('Realtime DB change received:', payload);
+          refreshData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Logger helper in database
@@ -1086,6 +1124,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     orderValue?: number;
     gstNumber?: string | null;
     deliveryDate?: string | null;
+    skipVisitCreation?: boolean;
   }) => {
     const order = orders.find(o => o.id === id);
     if (!order) return;
@@ -1099,14 +1138,67 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     
     if (updates.deliveryPartner !== undefined) {
       payload.delivery_partner = updates.deliveryPartner;
-      if (updates.deliveryPartner !== (order.deliveryPartner || null) && updates.deliveryPartner !== null) {
+      if (updates.deliveryPartner !== (order.deliveryPartner || null) && updates.deliveryPartner !== null && !updates.skipVisitCreation) {
         payload.engineer_assign_alert = true;
+        
+        // Auto-create a Delivery visit when delivery partner is assigned
+        const visitId = `V-${Date.now()}`;
+        const customerName = updates.companyName || order.companyName;
+        const customerObj = customers.find(c => c.name.toLowerCase() === customerName.toLowerCase());
+        const newVisit = {
+          id: visitId,
+          visit_type: 'Delivery',
+          company_name: customerName,
+          contact_person: customerObj?.contactPerson || null,
+          phone: customerObj?.phone || null,
+          city: updates.city || order.city || null,
+          branch: updates.branch || order.branch || null,
+          order_id: id,
+          supplier_id: updates.supplierId !== undefined ? updates.supplierId : (order.supplierId || null),
+          products_selected: order.productsSelected || [],
+          salesperson: updates.deliveryPartner,
+          status: 'Pending',
+          scheduled_at: updates.deliveryDate || order.deliveryDate || null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        // Run insert asynchronously to avoid blocking
+        supabase.from("visits").insert(newVisit).then(({ error }) => {
+          if (error) console.error("Error auto-creating delivery visit:", error);
+        });
       }
     }
     
     if (updates.assignedEngineer !== undefined) {
       payload.assigned_engineer = updates.assignedEngineer;
-      if (updates.assignedEngineer !== (order.assignedEngineer || null) && updates.assignedEngineer !== null) {
+      if (updates.assignedEngineer !== (order.assignedEngineer || null) && updates.assignedEngineer !== null && !updates.skipVisitCreation) {
+        payload.engineer_assign_alert = true;
+
+        // Auto-create a Commissioning visit when assigned engineer is assigned
+        const visitId = `V-${Date.now()}`;
+        const customerName = updates.companyName || order.companyName;
+        const customerObj = customers.find(c => c.name.toLowerCase() === customerName.toLowerCase());
+        const newVisit = {
+          id: visitId,
+          visit_type: 'Commissioning',
+          company_name: customerName,
+          contact_person: customerObj?.contactPerson || null,
+          phone: customerObj?.phone || null,
+          city: updates.city || order.city || null,
+          branch: updates.branch || order.branch || null,
+          order_id: id,
+          products_selected: order.productsSelected || [],
+          salesperson: updates.assignedEngineer,
+          status: 'Pending',
+          scheduled_at: updates.deliveryDate || order.deliveryDate || null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        // Run insert asynchronously to avoid blocking
+        supabase.from("visits").insert(newVisit).then(({ error }) => {
+          if (error) console.error("Error auto-creating commissioning visit:", error);
+        });
+      } else if (updates.assignedEngineer !== (order.assignedEngineer || null) && updates.assignedEngineer !== null) {
         payload.engineer_assign_alert = true;
       }
     }
@@ -1225,10 +1317,14 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // 7. Toggle Quotation Approval
-  const toggleQuotationApproval = async (orderId: string, quotationId: string) => {
-    const order = orders.find(o => o.id === orderId);
-    if (!order) return;
-    const quo = order.quotations.find(q => q.id === quotationId);
+  const toggleQuotationApproval = async (parentId: string, quotationId: string) => {
+    const order = orders.find(o => o.id === parentId);
+    const lead = leads.find(l => l.id === parentId);
+
+    let quo;
+    if (order) quo = order.quotations.find(q => q.id === quotationId);
+    else if (lead) quo = (lead.quotations || []).find(q => q.id === quotationId);
+
     if (!quo) return;
 
     const approvedState = !quo.approved;
@@ -1236,7 +1332,17 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       approved: approvedState
     }).eq("id", quotationId);
 
-    await logTimelineInDb(orderId, `Quotation "${quo.fileName}" approval flag toggled to: ${approvedState ? "Approved" : "Pending"}`);
+    if (order) {
+      await logTimelineInDb(parentId, `Quotation "${quo.fileName}" approval flag toggled to: ${approvedState ? "Approved" : "Pending"}`);
+    } else if (lead) {
+      await supabase.from("notes").insert({
+        id: `n-${Date.now()}`,
+        parent_id: parentId,
+        parent_type: 'lead',
+        text: `Quotation "${quo.fileName}" approval flag toggled to: ${approvedState ? "Approved" : "Pending"}`,
+        user_name: currentSimulatedUser
+      });
+    }
     await refreshData();
   };
 
@@ -1644,6 +1750,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       city: data.city || null,
       address: data.address || null,
       branches: data.branches || [],
+      branch_details: data.branchDetails || [],
       gst_number: data.gstNumber || null
     });
     if (error) {
@@ -1684,12 +1791,16 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const visitId = `V-${Date.now()}`;
     const { error } = await supabase.from("visits").insert({
       id: visitId,
+      visit_type: visitData.visitType || 'Sales',
+      service_type: visitData.serviceType || null,
       company_name: visitData.companyName,
       contact_person: visitData.contactPerson || null,
       phone: visitData.phone || null,
       city: visitData.city || null,
       address: visitData.address || null,
       branch: visitData.branch || null,
+      order_id: visitData.orderId || null,
+      supplier_id: visitData.supplierId || null,
       products_selected: visitData.productsSelected || [],
       salesperson: visitData.salesperson || currentSimulatedUser,
       status: 'Pending',
@@ -1701,8 +1812,54 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return;
     }
 
-    if (visitData.notesText?.trim()) {
-      await addNoteToVisit(visitId, visitData.notesText.trim());
+    if (visitData.notesText?.trim() || (visitData as any).notesPhoto || (visitData as any).notesVoice) {
+      await addNoteToVisit(visitId, visitData.notesText?.trim() || "Initial Visit Log", (visitData as any).notesPhoto, (visitData as any).notesVoice);
+    }
+
+    if (visitData.visitType === 'Sales' && visitData.branch) {
+      const customer = customers.find(c => c.name.toLowerCase() === visitData.companyName.toLowerCase());
+      if (customer) {
+        let changed = false;
+        const newBranchDetails = [...(customer.branchDetails || [])];
+        const bIndex = newBranchDetails.findIndex(b => b.name === visitData.branch);
+        
+        if (bIndex > -1) {
+          const existing = newBranchDetails[bIndex];
+          if (visitData.contactPerson && existing.contactPerson !== visitData.contactPerson) {
+             existing.contactPerson = visitData.contactPerson;
+             changed = true;
+          }
+          if (visitData.phone && existing.phone !== visitData.phone) {
+             existing.phone = visitData.phone;
+             changed = true;
+          }
+          if (visitData.address && existing.address !== visitData.address) {
+             existing.address = visitData.address;
+             changed = true;
+          }
+        } else {
+          newBranchDetails.push({
+            name: visitData.branch,
+            contactPerson: visitData.contactPerson,
+            phone: visitData.phone,
+            address: visitData.address
+          });
+          changed = true;
+        }
+
+        const newBranches = [...(customer.branches || [])];
+        if (!newBranches.includes(visitData.branch)) {
+           newBranches.push(visitData.branch);
+           changed = true;
+        }
+
+        if (changed) {
+          await supabase.from("customers").update({
+            branch_details: newBranchDetails,
+            branches: newBranches
+          }).eq("id", customer.id);
+        }
+      }
     }
 
     await refreshData();
@@ -1725,6 +1882,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         status: 'Started',
         start_time: new Date().toISOString(),
         start_location: location,
+        started_by: currentSimulatedUser,
         updated_at: new Date().toISOString()
       })
       .eq("id", id);
@@ -1824,15 +1982,19 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const updateVisit = async (id: string, updates: Partial<Omit<Visit, "id" | "createdAt" | "updatedAt" | "notes" | "status">>) => {
     const dbUpdates: any = {};
+    if (updates.visitType !== undefined) dbUpdates.visit_type = updates.visitType;
+    if (updates.serviceType !== undefined) dbUpdates.service_type = updates.serviceType;
     if (updates.companyName !== undefined) dbUpdates.company_name = updates.companyName;
     if (updates.contactPerson !== undefined) dbUpdates.contact_person = updates.contactPerson;
     if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
     if (updates.city !== undefined) dbUpdates.city = updates.city;
     if (updates.address !== undefined) dbUpdates.address = updates.address;
     if (updates.branch !== undefined) dbUpdates.branch = updates.branch;
+    if (updates.orderId !== undefined) dbUpdates.order_id = updates.orderId;
     if (updates.productsSelected !== undefined) dbUpdates.products_selected = updates.productsSelected;
     if (updates.salesperson !== undefined) dbUpdates.salesperson = updates.salesperson;
     if (updates.scheduledAt !== undefined) dbUpdates.scheduled_at = updates.scheduledAt;
+    if (updates.supplierId !== undefined) dbUpdates.supplier_id = updates.supplierId;
 
     dbUpdates.updated_at = new Date().toISOString();
 
@@ -1862,6 +2024,9 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const emp = employees.find(e => e.name === currentSimulatedUser);
     if (!emp) return false;
     if (!emp.permissions) return false;
+    if (moduleName === "Customers" && emp.permissions["Customers"] === undefined) {
+      return emp.permissions["Masters"]?.read ?? false;
+    }
     return emp.permissions[moduleName]?.read ?? false;
   };
 
@@ -1871,6 +2036,9 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const emp = employees.find(e => e.name === currentSimulatedUser);
     if (!emp) return false;
     if (!emp.permissions) return false;
+    if (moduleName === "Customers" && emp.permissions["Customers"] === undefined) {
+      return emp.permissions["Masters"]?.write ?? false;
+    }
     return emp.permissions[moduleName]?.write ?? false;
   };
 

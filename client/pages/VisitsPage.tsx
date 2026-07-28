@@ -1,11 +1,132 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Search, Plus, Filter, MapPin, Phone, User, Calendar, Check, X, CalendarClock, ChevronDown, Edit2, Play, CheckSquare, PhoneCall } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Search, Plus, Filter, MapPin, Phone, User, Calendar, Check, X, CalendarClock, ChevronDown, Edit2, Play, CheckSquare, PhoneCall, ArrowLeft } from "lucide-react";
 import { useAppState, Visit } from "@/hooks/useAppState";
 import { NotesComponent } from "@/components/NotesComponent";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
+export interface SearchableSelectOption {
+  label: string;
+  value: string;
+  sublabel?: string;
+}
+
+export const SearchableSelect: React.FC<{
+  options: SearchableSelectOption[];
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  required?: boolean;
+  className?: string;
+}> = ({ options, value, onChange, placeholder = "Select...", disabled = false, required = false, className = "" }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  const selectedOption = options.find(o => o.value === value);
+
+  const filteredOptions = useMemo(() => {
+    if (!searchTerm.trim()) return options;
+    const term = searchTerm.toLowerCase();
+    return options.filter(o => 
+      o.label.toLowerCase().includes(term) ||
+      (o.sublabel && o.sublabel.toLowerCase().includes(term))
+    );
+  }, [options, searchTerm]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div className={`relative ${className}`} ref={containerRef}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled) {
+            setIsOpen(!isOpen);
+            setSearchTerm("");
+          }
+        }}
+        className={`w-full text-left rounded-lg border border-slate-200 bg-white p-2.5 flex items-center justify-between text-xs transition ${
+          disabled ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'hover:border-slate-300'
+        } ${isOpen ? 'ring-2 ring-[#173c2d]/20 border-[#173c2d]' : ''}`}
+      >
+        <span className={`truncate ${!selectedOption ? 'text-slate-400' : 'text-slate-800 font-medium'}`}>
+          {selectedOption ? selectedOption.label : placeholder}
+        </span>
+        <ChevronDown size={14} className="text-slate-400 shrink-0 ml-1" />
+      </button>
+
+      {required && (
+        <input
+          tabIndex={-1}
+          className="opacity-0 absolute inset-0 pointer-events-none"
+          value={value}
+          onChange={() => {}}
+          required
+        />
+      )}
+
+      {isOpen && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 overflow-hidden animate-in fade-in duration-100">
+          <div className="p-2 border-b border-slate-100 bg-slate-50 flex items-center gap-1.5">
+            <Search size={14} className="text-slate-400 shrink-0" />
+            <input
+              autoFocus
+              type="text"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Type to search..."
+              className="w-full bg-transparent text-xs outline-none text-slate-800 placeholder:text-slate-400"
+            />
+            {searchTerm && (
+              <button type="button" onClick={() => setSearchTerm("")} className="text-slate-400 hover:text-slate-600">
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
+          <div className="max-h-48 overflow-y-auto p-1 space-y-0.5">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map(opt => (
+                <div
+                  key={opt.value}
+                  onClick={() => {
+                    onChange(opt.value);
+                    setIsOpen(false);
+                  }}
+                  className={`p-2 rounded-md cursor-pointer text-xs transition flex flex-col ${
+                    opt.value === value
+                      ? 'bg-[#173c2d]/10 text-[#173c2d] font-semibold'
+                      : 'hover:bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  <span>{opt.label}</span>
+                  {opt.sublabel && <span className="text-[10px] text-slate-400 font-normal">{opt.sublabel}</span>}
+                </div>
+              ))
+            ) : (
+              <div className="p-3 text-center text-xs text-slate-400 italic">No options found</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const VisitsPage: React.FC = () => {
+  const navigate = useNavigate();
   const {
     visits,
     addVisit,
@@ -18,9 +139,20 @@ export const VisitsPage: React.FC = () => {
     employees,
     cities,
     products,
+    orders,
     currentUserRole,
     currentSimulatedUser,
-    hasWritePermission
+    hasWritePermission,
+    updateOrderStatus,
+    updateOrderDetails,
+    uploadServiceReport,
+    serviceCycles,
+    completeServiceCheckup,
+    completeMajorService,
+    uploadServiceQuotation,
+    inventory,
+    assignServiceTrackEngineer,
+    suppliers
   } = useAppState();
 
   const canWrite = hasWritePermission("Visits");
@@ -39,6 +171,7 @@ export const VisitsPage: React.FC = () => {
   const [editingVisit, setEditingVisit] = useState<Visit | null>(null);
 
   // Form Fields
+  const [formVisitType, setFormVisitType] = useState<Visit['visitType']>('Sales');
   const [formCompany, setFormCompany] = useState("");
   const [showCompanySuggestions, setShowCompanySuggestions] = useState(false);
   const [formContact, setFormContact] = useState("");
@@ -49,7 +182,15 @@ export const VisitsPage: React.FC = () => {
   const [formSalesperson, setFormSalesperson] = useState("");
   const [formScheduledDate, setFormScheduledDate] = useState("");
   const [formNotes, setFormNotes] = useState("");
-  const [selectedProducts, setSelectedProducts] = useState<{ productId: string; quantity: number }[]>([]);
+  const [formOrderId, setFormOrderId] = useState("");
+  const [formSupplierId, setFormSupplierId] = useState("");
+  const [formLogPhoto, setFormLogPhoto] = useState<string | null>(null);
+  const [formLogVoice, setFormLogVoice] = useState<string | null>(null);
+
+  // Delivery Warning Popup State
+  const [showDeliveryWarning, setShowDeliveryWarning] = useState(false);
+  const [pendingVisitPayload, setPendingVisitPayload] = useState<any>(null);
+  const [deliveryWarningStatus, setDeliveryWarningStatus] = useState<string>("");
 
   // Log Visit Modal State
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
@@ -60,6 +201,31 @@ export const VisitsPage: React.FC = () => {
   const [logVoice, setLogVoice] = useState<string | null>(null);
   const [logFollowUpDate, setLogFollowUpDate] = useState("");
   const [logReason, setLogReason] = useState("");
+  const [deliveryCompleted, setDeliveryCompleted] = useState(false);
+  const [commissioningDone, setCommissioningDone] = useState(false);
+  const [commissioningReportFile, setCommissioningReportFile] = useState<File | null>(null);
+
+  // Service Visit Form & Log States
+  const [formServiceType, setFormServiceType] = useState<'Checkup' | 'Major'>('Checkup');
+  const [serviceDone, setServiceDone] = useState(false);
+  const [serviceIssueFound, setServiceIssueFound] = useState(false);
+  const [serviceCheckupReportFile, setServiceCheckupReportFile] = useState<File | null>(null);
+  const [serviceQuotationFile, setServiceQuotationFile] = useState<File | null>(null);
+  const [servicePreReportFile, setServicePreReportFile] = useState<File | null>(null);
+  const [servicePostReportFile, setServicePostReportFile] = useState<File | null>(null);
+  const [servicePartsUsed, setServicePartsUsed] = useState<{ partId: string; qty: number }[]>([]);
+  const [serviceSelectedPartId, setServiceSelectedPartId] = useState("");
+  const [serviceSelectedPartQty, setServiceSelectedPartQty] = useState("1");
+  const [serviceCheckupReportName, setServiceCheckupReportName] = useState("");
+  const [serviceQuotationName, setServiceQuotationName] = useState("");
+  const [servicePreReportName, setServicePreReportName] = useState("");
+  const [servicePostReportName, setServicePostReportName] = useState("");
+
+  const loggingVisitObj = useMemo(() => {
+    return visits.find(v => v.id === logVisitId) || null;
+  }, [visits, logVisitId]);
+
+  const isSalesVisit = !loggingVisitObj || loggingVisitObj.visitType === 'Sales';
   
   // Audio recording/photo mock simulation inside Log Outcome popup
   const [isRecording, setIsRecording] = useState(false);
@@ -71,12 +237,18 @@ export const VisitsPage: React.FC = () => {
   // Filtered Visits List
   const filteredVisits = useMemo(() => {
     return (visits || []).filter(v => {
+      if (v.visitType !== 'Sales' && (v.status === 'Completed' || v.status === 'Issue Found')) {
+        return false;
+      }
       const matchesQuery = `${v.companyName} ${v.contactPerson || ""} ${v.city || ""}`.toLowerCase().includes(query.toLowerCase());
       const matchesStatus = !statusFilter || v.status === statusFilter;
       const matchesSales = !salesFilter || v.salesperson === salesFilter;
-      return matchesQuery && matchesStatus && matchesSales;
+      const matchesRole = (currentUserRole === "Owner" || currentUserRole === "Receptionist")
+        ? true
+        : v.salesperson === currentSimulatedUser;
+      return matchesQuery && matchesStatus && matchesSales && matchesRole;
     });
-  }, [visits, query, statusFilter, salesFilter]);
+  }, [visits, query, statusFilter, salesFilter, currentUserRole, currentSimulatedUser]);
 
   // Set default salesperson for form based on role
   useEffect(() => {
@@ -87,77 +259,190 @@ export const VisitsPage: React.FC = () => {
     }
   }, [currentUserRole, currentSimulatedUser, employees, formSalesperson]);
 
+  const getOrderLastServiceInfo = (orderId: string) => {
+    const sc = serviceCycles.find(s => s.orderId === orderId);
+    if (!sc) return "Last Service: None";
+    
+    const checkupDate = sc.lastCheckupDate ? new Date(sc.lastCheckupDate) : null;
+    const majorDate = sc.lastMajorServiceDate ? new Date(sc.lastMajorServiceDate) : null;
+    
+    if (!checkupDate && !majorDate) {
+      return "Last Service: None";
+    }
+    
+    if (checkupDate && (!majorDate || checkupDate >= majorDate)) {
+      return `Last Service: ${checkupDate.toLocaleDateString('en-IN')} (Checkup)`;
+    } else if (majorDate && (!checkupDate || majorDate > checkupDate)) {
+      return `Last Service: ${majorDate.toLocaleDateString('en-IN')} (Major Service)`;
+    }
+    
+    return "Last Service: None";
+  };
+
   // Auto-filtering suggestions for customer selection
   const companySuggestions = useMemo(() => {
-    if (!formCompany.trim()) return [];
-    return customers.filter(c => c.name.toLowerCase().includes(formCompany.toLowerCase()));
+    if (!formCompany?.trim()) return [];
+    const term = (formCompany || "").toLowerCase();
+    return customers.filter(c => 
+      (c.name || "").toLowerCase().includes(term) ||
+      (c.contactPerson || "").toLowerCase().includes(term)
+    );
   }, [formCompany, customers]);
+
+  const handleOrderSelectionChange = (orderId: string) => {
+    setFormOrderId(orderId);
+    if (!orderId) return;
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+    
+    if (formVisitType === 'Delivery') {
+      if (order.deliveryPartner) {
+        setFormSalesperson(order.deliveryPartner);
+      }
+    } else if (formVisitType === 'Commissioning' || formVisitType === 'Service') {
+      if (order.assignedEngineer) {
+        setFormSalesperson(order.assignedEngineer);
+      }
+    }
+  };
 
   const handleSelectCustomer = (customer: typeof customers[0]) => {
     setFormCompany(customer.name);
-    setFormContact(customer.contactPerson || "");
-    setFormPhone(customer.phone || "");
+    const branchName = customer.branches?.[0] || "";
+    setFormBranch(branchName);
+    
+    const bDetail = customer.branchDetails?.find(b => b.name === branchName);
+    if (bDetail) {
+      setFormContact(bDetail.contactPerson || customer.contactPerson || "");
+      setFormPhone(bDetail.phone || customer.phone || "");
+      setFormAddress(bDetail.address || customer.address || "");
+    } else {
+      setFormContact(customer.contactPerson || "");
+      setFormPhone(customer.phone || "");
+      setFormAddress(customer.address || "");
+    }
+    
     setFormCity(customer.city || "Ahmedabad");
-    setFormAddress(customer.address || "");
-    setFormBranch(customer.branches?.[0] || "");
     setShowCompanySuggestions(false);
+
+    const custOrders = orders.filter(o => 
+      (o.companyName || "").toLowerCase() === (customer.name || "").toLowerCase() &&
+      (formVisitType === 'Service' ? o.status === "Commissioned/Completed" : true)
+    );
+    if (custOrders.length === 1) {
+      handleOrderSelectionChange(custOrders[0].id);
+    } else {
+      setFormOrderId("");
+    }
   };
 
-  const handleProductQuantityChange = (productId: string, delta: number) => {
-    setSelectedProducts(prev => {
-      const existing = prev.find(p => p.productId === productId);
-      if (existing) {
-        const nextQty = existing.quantity + delta;
-        if (nextQty <= 0) {
-          return prev.filter(p => p.productId !== productId);
-        }
-        return prev.map(p => p.productId === productId ? { ...p, quantity: nextQty } : p);
-      } else if (delta > 0) {
-        return [...prev, { productId, quantity: delta }];
+  const handleBranchChange = (branchName: string) => {
+    setFormBranch(branchName);
+    const cust = customers.find(c => (c.name || "").toLowerCase() === (formCompany || "").toLowerCase());
+    if (cust && cust.branchDetails) {
+      const bDetail = cust.branchDetails.find(b => b.name.toLowerCase() === branchName.toLowerCase());
+      if (bDetail) {
+        if (bDetail.contactPerson) setFormContact(bDetail.contactPerson);
+        if (bDetail.phone) setFormPhone(bDetail.phone);
+        if (bDetail.address) setFormAddress(bDetail.address);
       }
-      return prev;
-    });
+    }
   };
+
+
 
   const handleSaveVisit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formCompany.trim()) return alert("Company name is required.");
-
-    const dbProducts = selectedProducts.map(sp => {
-      const prod = products.find(p => p.id === sp.productId);
-      return {
-        productId: sp.productId,
-        productName: prod ? prod.name : "Unknown Product",
-        quantity: sp.quantity,
-        invoiceAmount: prod?.price || 0
-      };
-    });
+    if (!formScheduledDate) return alert("Scheduled Date & Time is mandatory.");
+    if (formVisitType === 'Sales') {
+      if (!formContact.trim()) return alert("Contact Person name is required for Sales visits.");
+      if (!formPhone.trim()) return alert("Contact Phone Number is required for Sales visits.");
+    }
+    if ((formVisitType === 'Delivery' || formVisitType === 'Commissioning' || formVisitType === 'Service') && !formOrderId) {
+      return alert(`Order selection is required for ${formVisitType} visits.`);
+    }
 
     const visitPayload = {
+      visitType: formVisitType,
+      serviceType: formVisitType === 'Service' ? formServiceType : undefined,
       companyName: formCompany,
       contactPerson: formContact || undefined,
       phone: formPhone || undefined,
       city: formCity || undefined,
       address: formAddress || undefined,
       branch: formBranch || undefined,
-      productsSelected: dbProducts,
+      orderId: formOrderId || undefined,
+      supplierId: formVisitType === 'Delivery' ? (formSupplierId || undefined) : undefined,
+      productsSelected: (formVisitType === 'Delivery' && formOrderId) ? (orders.find(o => o.id === formOrderId)?.productsSelected || []) : [],
       salesperson: formSalesperson || currentSimulatedUser,
       scheduledAt: formScheduledDate ? new Date(formScheduledDate).toISOString() : undefined,
-      notesText: formNotes || undefined
+      notesText: formNotes || undefined,
+      notesPhoto: formLogPhoto || undefined,
+      notesVoice: formLogVoice || undefined
     };
 
+    if (formVisitType === 'Delivery' && formOrderId) {
+      const selectedOrd = orders.find(o => o.id === formOrderId);
+      if (selectedOrd && selectedOrd.status !== "Order Placed with Supplier") {
+        setDeliveryWarningStatus(selectedOrd.status);
+        setPendingVisitPayload(visitPayload);
+        setShowDeliveryWarning(true);
+        return;
+      }
+    }
+
+    await executeSaveVisit(visitPayload);
+  };
+
+  const executeSaveVisit = async (payload: any) => {
     if (editingVisit) {
-      await updateVisit(editingVisit.id, visitPayload);
+      await updateVisit(editingVisit.id, payload);
     } else {
-      await addVisit(visitPayload);
+      await addVisit(payload);
+    }
+
+    if (payload.orderId) {
+      if (payload.visitType === 'Delivery') {
+        await updateOrderDetails(payload.orderId, {
+          deliveryPartner: payload.salesperson || null,
+          deliveryDate: payload.scheduledAt || null,
+          supplierId: payload.supplierId || null,
+          status: "Order Placed with Supplier",
+          skipVisitCreation: true
+        });
+      } else if (payload.visitType === 'Commissioning') {
+        await updateOrderDetails(payload.orderId, {
+          assignedEngineer: payload.salesperson || null,
+          deliveryDate: payload.scheduledAt || null,
+          skipVisitCreation: true
+        });
+      } else if (payload.visitType === 'Service') {
+        await updateOrderDetails(payload.orderId, {
+          assignedEngineer: payload.salesperson || null,
+          deliveryDate: payload.scheduledAt || null,
+          skipVisitCreation: true
+        });
+        if (assignServiceTrackEngineer) {
+          await assignServiceTrackEngineer(payload.orderId, payload.serviceType === 'Major' ? 'Major' : 'Checkup', payload.salesperson || null);
+        }
+      }
     }
 
     setIsFormModalOpen(false);
     resetForm();
+    setShowDeliveryWarning(false);
+    setPendingVisitPayload(null);
   };
 
   const resetForm = () => {
     setEditingVisit(null);
+    if (currentUserRole === "Service Engineer") {
+      setFormVisitType('Commissioning');
+    } else {
+      setFormVisitType('Sales');
+    }
+    setFormServiceType('Checkup');
     setFormCompany("");
     setFormContact("");
     setFormPhone("");
@@ -166,7 +451,10 @@ export const VisitsPage: React.FC = () => {
     setFormBranch("");
     setFormScheduledDate("");
     setFormNotes("");
-    setSelectedProducts([]);
+    setFormOrderId("");
+    setFormSupplierId("");
+    setFormLogPhoto(null);
+    setFormLogVoice(null);
     if (currentUserRole !== "Owner") {
       setFormSalesperson(currentSimulatedUser);
     } else {
@@ -176,16 +464,21 @@ export const VisitsPage: React.FC = () => {
 
   const handleOpenEdit = (v: Visit) => {
     setEditingVisit(v);
+    setFormVisitType(v.visitType || 'Sales');
+    setFormServiceType(v.serviceType || 'Checkup');
     setFormCompany(v.companyName);
     setFormContact(v.contactPerson || "");
     setFormPhone(v.phone || "");
     setFormCity(v.city || "Ahmedabad");
     setFormAddress(v.address || "");
     setFormBranch(v.branch || "");
+    setFormOrderId(v.orderId || "");
+    setFormSupplierId(v.supplierId || "");
     setFormSalesperson(v.salesperson || "");
     setFormScheduledDate(v.scheduledAt ? new Date(v.scheduledAt).toISOString().slice(0, 16) : "");
-    setSelectedProducts((v.productsSelected || []).map(p => ({ productId: p.productId, quantity: p.quantity })));
     setFormNotes("");
+    setFormLogPhoto(null);
+    setFormLogVoice(null);
     setIsFormModalOpen(true);
   };
 
@@ -202,20 +495,92 @@ export const VisitsPage: React.FC = () => {
   };
 
   const handleSaveLogOutcome = async () => {
-    if (!logStatus) return alert("Outcome status is mandatory.");
-    if (["Unavailable", "Postponed"].includes(logStatus) && !logNotes.trim()) {
-      return alert("Notes are required for this status.");
+    const activeLogVisitObj = visits.find(v => v.id === logVisitId);
+    const isSalesVisit = !activeLogVisitObj || activeLogVisitObj.visitType === 'Sales';
+
+    if (isSalesVisit) {
+      if (!logStatus) return alert("Outcome status is mandatory.");
+      if (["Unavailable", "Postponed"].includes(logStatus) && !logNotes.trim()) {
+        return alert("Notes are required for this status.");
+      }
+      if (logStatus === "Postponed" && !logFollowUpDate) {
+        return alert("Follow-up date is mandatory for Postponed status.");
+      }
+      if (["Disqualified", "Lost"].includes(logStatus) && !logNotes.trim()) {
+        return alert("Notes/Reason are mandatory for this status.");
+      }
+    } else {
+      if (activeLogVisitObj?.visitType === 'Delivery') {
+        if (!deliveryCompleted && !commissioningDone) {
+          return alert("Please check Delivery Completed or Commissioning Done to proceed.");
+        }
+      } else if (activeLogVisitObj?.visitType === 'Commissioning') {
+        if (!commissioningDone) {
+          return alert("Please check Commissioning Done to proceed.");
+        }
+      } else if (activeLogVisitObj?.visitType === 'Service') {
+        if (!serviceDone) {
+          return alert("Please check Service Done to proceed.");
+        }
+      }
     }
-    if (logStatus === "Postponed" && !logFollowUpDate) {
-      return alert("Follow-up date is mandatory for Postponed status.");
+
+    if (activeLogVisitObj && (activeLogVisitObj.visitType === 'Delivery' || activeLogVisitObj.visitType === 'Commissioning') && activeLogVisitObj.orderId) {
+      if (commissioningDone) {
+        const assocOrder = orders.find(o => o.id === activeLogVisitObj.orderId);
+        if (assocOrder && !assocOrder.gstNumber) {
+          return alert("GST Number is compulsory on the order before it can be marked as Commissioned/Completed.");
+        }
+        await updateOrderStatus(activeLogVisitObj.orderId, "Commissioned/Completed");
+        if (commissioningReportFile) {
+          await uploadServiceReport(activeLogVisitObj.orderId, "Checkup", commissioningReportFile);
+        }
+      } else if (deliveryCompleted && activeLogVisitObj.visitType === 'Delivery') {
+        await updateOrderStatus(activeLogVisitObj.orderId, "Commissioning Pending");
+      }
     }
-    if (["Disqualified", "Lost"].includes(logStatus) && !logNotes.trim()) {
-      return alert("Notes/Reason are mandatory for this status.");
+
+    if (activeLogVisitObj && activeLogVisitObj.visitType === 'Service' && activeLogVisitObj.orderId) {
+      if (serviceDone) {
+        if (activeLogVisitObj.serviceType === 'Major') {
+          const finalPre = servicePreReportName.trim() || "Pre-Service Report";
+          const finalPost = servicePostReportName.trim() || "Post-Service Report";
+          await completeMajorService(
+            activeLogVisitObj.orderId,
+            finalPre,
+            finalPost,
+            servicePartsUsed,
+            activeLogVisitObj.salesperson || currentSimulatedUser
+          );
+        } else {
+          const finalReport = serviceCheckupReportName.trim() || "Checkup Report";
+          await completeServiceCheckup(
+            activeLogVisitObj.orderId,
+            finalReport,
+            activeLogVisitObj.salesperson || currentSimulatedUser
+          );
+          if (serviceIssueFound && serviceQuotationName.trim()) {
+            await uploadServiceQuotation(activeLogVisitObj.orderId, serviceQuotationName.trim());
+          }
+        }
+      }
     }
 
     if (logVisitId) {
+      let finalStatus: Visit["status"];
+      if (isSalesVisit) {
+        finalStatus = logStatus as Visit["status"];
+      } else if (
+        activeLogVisitObj?.visitType === 'Service' &&
+        activeLogVisitObj.serviceType === 'Checkup' &&
+        serviceIssueFound
+      ) {
+        finalStatus = 'Issue Found';
+      } else {
+        finalStatus = 'Completed';
+      }
       await logVisit(logVisitId, {
-        status: logStatus,
+        status: finalStatus,
         notesText: logNotes,
         photo: logPhoto || undefined,
         voiceNote: logVoice || undefined,
@@ -224,6 +589,10 @@ export const VisitsPage: React.FC = () => {
       });
     }
 
+    closeLogModal();
+  };
+
+  const closeLogModal = () => {
     setIsLogModalOpen(false);
     setLogVisitId(null);
     setLogStatus("");
@@ -232,6 +601,22 @@ export const VisitsPage: React.FC = () => {
     setLogVoice(null);
     setLogFollowUpDate("");
     setLogReason("");
+    setDeliveryCompleted(false);
+    setCommissioningDone(false);
+    setCommissioningReportFile(null);
+    setServiceDone(false);
+    setServiceIssueFound(false);
+    setServiceCheckupReportFile(null);
+    setServiceQuotationFile(null);
+    setServicePreReportFile(null);
+    setServicePostReportFile(null);
+    setServicePartsUsed([]);
+    setServiceSelectedPartId("");
+    setServiceSelectedPartQty("1");
+    setServiceCheckupReportName("");
+    setServiceQuotationName("");
+    setServicePreReportName("");
+    setServicePostReportName("");
   };
 
   const handleCall = (phone: string) => {
@@ -249,6 +634,7 @@ export const VisitsPage: React.FC = () => {
       case "Disqualified": return "bg-red-100 text-red-700 border-red-200";
       case "Convert to lead": return "bg-emerald-100 text-emerald-700 border-emerald-200";
       case "Lost": return "bg-rose-100 text-rose-700 border-rose-200";
+      case "Issue Found": return "bg-orange-100 text-orange-800 border-orange-300";
       default: return "bg-slate-100 text-slate-700 border-slate-200";
     }
   };
@@ -290,8 +676,8 @@ export const VisitsPage: React.FC = () => {
         <div className="min-h-screen bg-slate-50 text-slate-800 px-4 py-5 space-y-5 animate-fadeIn">
         {/* Top bar details layout */}
         <div className="flex items-center justify-between">
-          <button onClick={() => setSelectedVisitId(null)} className="text-[#173c2d] font-semibold text-sm flex items-center gap-1">
-            ← Back to list
+          <button onClick={() => setSelectedVisitId(null)} className="text-[#173c2d] font-semibold text-sm flex items-center gap-1.5">
+            <ArrowLeft size={15} /> Back to list
           </button>
           <div className="flex items-center gap-2">
             <button
@@ -310,17 +696,26 @@ export const VisitsPage: React.FC = () => {
                   <span>Start Visit</span>
                 </button>
               ) : selectedVisit.status === "Started" ? (
-                <button
-                  onClick={() => {
-                    setLogVisitId(selectedVisit.id);
-                    setIsLogModalOpen(true);
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs py-2 px-3 rounded-lg flex items-center gap-1 shadow-sm"
-                >
-                  <CheckSquare size={12} />
-                  <span>Log Visit</span>
-                </button>
-              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800 animate-pulse">
+                    {selectedVisit.startedBy === currentSimulatedUser
+                      ? `Ongoing (${selectedVisit.startedBy})`
+                      : "Ongoing"}
+                  </span>
+                  {(!selectedVisit.startedBy || selectedVisit.startedBy === currentSimulatedUser) && (
+                    <button
+                      onClick={() => {
+                        setLogVisitId(selectedVisit.id);
+                        setIsLogModalOpen(true);
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs py-2 px-3 rounded-lg flex items-center gap-1 shadow-sm"
+                    >
+                      <CheckSquare size={12} />
+                      <span>Log Visit</span>
+                    </button>
+                  )}
+                </div>
+              ) : selectedVisit.visitType === 'Sales' ? (
                 <select
                   value={selectedVisit.status}
                   onChange={(e) => {
@@ -347,6 +742,10 @@ export const VisitsPage: React.FC = () => {
                   <option value="Convert to lead">Convert to lead</option>
                   <option value="Lost">Lost</option>
                 </select>
+              ) : (
+                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold border ${getStatusBadgeStyles(selectedVisit.status)}`}>
+                  {selectedVisit.status}
+                </span>
               )}
             </div>
           </div>
@@ -377,6 +776,18 @@ export const VisitsPage: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-y-2.5 gap-x-4 border-t border-slate-200/80 pt-3 text-xs text-slate-650">
             <div>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Visit Type</p>
+              <p className="mt-0.5 text-slate-800 font-medium">{selectedVisit.visitType || "Sales"} Visit</p>
+            </div>
+            {selectedVisit.visitType === 'Delivery' && (
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Supplier</p>
+                <p className="mt-0.5 text-slate-800 font-medium">
+                  {suppliers.find(s => s.id === selectedVisit.supplierId)?.name || selectedVisit.supplierId || "-"}
+                </p>
+              </div>
+            )}
+            <div>
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">City</p>
               <p className="mt-0.5 text-slate-800">{selectedVisit.city || "-"}</p>
             </div>
@@ -406,11 +817,29 @@ export const VisitsPage: React.FC = () => {
                 {selectedVisit.startTime ? new Date(selectedVisit.startTime).toLocaleString() : "-"}
               </p>
             </div>
+            {selectedVisit.orderId && (
+              <div className="col-span-2 flex items-center justify-between bg-slate-100 p-2.5 rounded-lg border border-slate-200 mt-1">
+                <div>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase">Associated Order</p>
+                  <p className="text-xs font-bold text-slate-800">{selectedVisit.orderId}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    navigate(`/orders?orderId=${selectedVisit.orderId}`);
+                  }}
+                  className="bg-[#173c2d] hover:bg-[#204a3b] text-white text-[10px] font-bold py-1.5 px-3 rounded transition shadow-sm"
+                >
+                  See Order Details
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Interested products list */}
+          {/* Contextual products selected list */}
           <div className="border-t border-slate-200/80 pt-3 space-y-1.5">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Interested Products</h3>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              {selectedVisit.visitType === 'Sales' ? "Interested Products" : "Products Selected"}
+            </h3>
             {selectedVisit.productsSelected && selectedVisit.productsSelected.length > 0 ? (
               <div className="flex flex-wrap gap-1.5">
                 {selectedVisit.productsSelected.map((p, idx) => (
@@ -562,17 +991,26 @@ export const VisitsPage: React.FC = () => {
                       <span>Start Visit</span>
                     </button>
                   ) : visit.status === "Started" ? (
-                    <button
-                      onClick={() => {
-                        setLogVisitId(visit.id);
-                        setIsLogModalOpen(true);
-                      }}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs py-1.5 px-3 rounded-lg flex items-center gap-1"
-                    >
-                      <CheckSquare size={10} />
-                      <span>Log Visit</span>
-                    </button>
-                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800 animate-pulse">
+                        {visit.startedBy === currentSimulatedUser
+                          ? `Ongoing (${visit.startedBy})`
+                          : "Ongoing"}
+                      </span>
+                      {(!visit.startedBy || visit.startedBy === currentSimulatedUser) && (
+                        <button
+                          onClick={() => {
+                            setLogVisitId(visit.id);
+                            setIsLogModalOpen(true);
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs py-1.5 px-3 rounded-lg flex items-center gap-1"
+                        >
+                          <CheckSquare size={10} />
+                          <span>Log Visit</span>
+                        </button>
+                      )}
+                    </div>
+                  ) : visit.visitType === 'Sales' ? (
                     <select
                       value={visit.status}
                       onClick={(e) => e.stopPropagation()}
@@ -601,12 +1039,17 @@ export const VisitsPage: React.FC = () => {
                       <option value="Convert to lead">Convert to lead</option>
                       <option value="Lost">Lost</option>
                     </select>
+                  ) : (
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold border ${getStatusBadgeStyles(visit.status)}`}>
+                      {visit.status}
+                    </span>
                   )}
                 </div>
               </div>
 
               {/* Card Meta details */}
               <div className="grid grid-cols-2 gap-y-1.5 gap-x-3 text-xs text-slate-500/90 font-medium">
+                <div className="col-span-2 text-[#173c2d] font-bold text-[10px] uppercase tracking-wider bg-[#173c2d]/10 inline-block px-2 py-0.5 rounded w-fit mb-1">{visit.visitType || 'Sales'} Visit</div>
                 <div>Contact: <span className="text-slate-800">{visit.contactPerson || "-"}</span></div>
                 <div>City: <span className="text-slate-800">{visit.city || "-"}</span></div>
                 {visit.phone && <div className="col-span-2">Phone: <span className="text-slate-850 font-mono">{visit.phone}</span></div>}
@@ -653,36 +1096,41 @@ export const VisitsPage: React.FC = () => {
             <div className="space-y-3 text-xs">
               <label className="block font-semibold text-slate-650">
                 Visit Status
-                <select
+                <SearchableSelect
+                  options={[
+                    { label: "All Statuses", value: "" },
+                    { label: "Pending", value: "Pending" },
+                    { label: "Started", value: "Started" },
+                    { label: "In communication", value: "In communication" },
+                    { label: "Unavailable", value: "Unavailable" },
+                    { label: "Postponed", value: "Postponed" },
+                    { label: "Disqualified", value: "Disqualified" },
+                    { label: "Convert to lead", value: "Convert to lead" },
+                    { label: "Lost", value: "Lost" }
+                  ]}
                   value={statusFilter}
-                  onChange={e => setStatusFilter(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5"
-                >
-                  <option value="">All Statuses</option>
-                  <option value="Pending">Pending</option>
-                  <option value="Started">Started</option>
-                  <option value="In communication">In communication</option>
-                  <option value="Unavailable">Unavailable</option>
-                  <option value="Postponed">Postponed</option>
-                  <option value="Disqualified">Disqualified</option>
-                  <option value="Convert to lead">Convert to lead</option>
-                  <option value="Lost">Lost</option>
-                </select>
+                  onChange={setStatusFilter}
+                  placeholder="All Statuses"
+                  className="mt-1.5"
+                />
               </label>
 
               {currentUserRole === "Owner" && (
                 <label className="block font-semibold text-slate-650">
                   Salesperson Representative
-                  <select
+                  <SearchableSelect
+                    options={[
+                      { label: "All Representatives", value: "" },
+                      ...employees.filter(e => e.role === "Sales Person" || e.role === "Owner" || e.role === "Service Engineer").map(emp => ({
+                        label: `${emp.name} (${emp.role})`,
+                        value: emp.name
+                      }))
+                    ]}
                     value={salesFilter}
-                    onChange={e => setSalesFilter(e.target.value)}
-                    className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5"
-                  >
-                    <option value="">All Representatives</option>
-                    {employees.filter(e => e.role === "Sales Person" || e.role === "Owner").map(emp => (
-                      <option key={emp.name} value={emp.name}>{emp.name}</option>
-                    ))}
-                  </select>
+                    onChange={setSalesFilter}
+                    placeholder="All Representatives"
+                    className="mt-1.5"
+                  />
                 </label>
               )}
             </div>
@@ -717,54 +1165,135 @@ export const VisitsPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleSaveVisit} className="space-y-3.5 text-xs">
+              {/* Visit Type Toggle */}
+              {currentUserRole !== "Sales Person" && (
+                <div className="flex bg-slate-100 p-1 rounded-lg">
+                  {(currentUserRole === "Service Engineer"
+                    ? (['Commissioning', 'Service'] as const)
+                    : (['Sales', 'Delivery', 'Commissioning', 'Service'] as const)
+                  ).map(type => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setFormVisitType(type)}
+                      className={`flex-1 py-1.5 text-xs font-bold rounded-md transition ${
+                        formVisitType === type 
+                          ? 'bg-white shadow-sm text-slate-800' 
+                          : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {formVisitType === 'Service' && (
+                <div className="flex gap-4 p-2 bg-slate-50 border rounded-lg items-center justify-around">
+                  <span className="font-semibold text-slate-700 text-xs">Service Type:</span>
+                  <label className="flex items-center gap-1.5 cursor-pointer font-medium text-slate-850 text-xs">
+                    <input
+                      type="radio"
+                      name="serviceType"
+                      checked={formServiceType === 'Checkup'}
+                      onChange={() => setFormServiceType('Checkup')}
+                      className="text-[#173c2d] focus:ring-[#173c2d]"
+                    />
+                    Checkup Visit
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer font-medium text-slate-850 text-xs">
+                    <input
+                      type="radio"
+                      name="serviceType"
+                      checked={formServiceType === 'Major'}
+                      onChange={() => setFormServiceType('Major')}
+                      className="text-[#173c2d] focus:ring-[#173c2d]"
+                    />
+                    Main Service
+                  </label>
+                </div>
+              )}
+
               {/* Company Selection Combobox */}
-              <div className="relative">
-                <label className="block font-semibold text-slate-700">
-                  Company Name <span className="text-rose-500">*</span>
-                  <input
+              {formVisitType === 'Sales' ? (
+                <div className="relative">
+                  <label className="block font-semibold text-slate-700">
+                    Company Name <span className="text-rose-500">*</span>
+                    <input
+                      value={formCompany}
+                      onChange={e => {
+                        setFormCompany(e.target.value);
+                        setShowCompanySuggestions(true);
+                      }}
+                      onFocus={() => setShowCompanySuggestions(true)}
+                      placeholder="Search or enter company name"
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5"
+                      required
+                    />
+                  </label>
+                  {showCompanySuggestions && companySuggestions.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 bg-white border border-slate-200 rounded-lg shadow-lg mt-1 z-50 max-h-32 overflow-y-auto">
+                      {companySuggestions.map((cust) => (
+                        <div
+                          key={cust.id}
+                          onClick={() => handleSelectCustomer(cust)}
+                          className="p-2 hover:bg-slate-50 cursor-pointer font-medium border-b border-slate-100 last:border-0"
+                        >
+                          {cust.name} ({cust.city || "-"}) - {cust.contactPerson || "No Contact"}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Company Name <span className="text-rose-500">*</span>
+                  </label>
+                  <SearchableSelect
+                    options={customers
+                      .filter(c => 
+                        formVisitType === 'Service' 
+                          ? orders.some(o => (o.companyName || "").toLowerCase() === (c.name || "").toLowerCase() && o.status === "Commissioned/Completed")
+                          : true
+                      )
+                      .map(c => ({
+                        label: `${c.name} (${c.city || "-"}) - ${c.contactPerson || "No Contact"}`,
+                        value: c.name
+                      }))}
                     value={formCompany}
-                    onChange={e => {
-                      setFormCompany(e.target.value);
-                      setShowCompanySuggestions(true);
+                    onChange={(val) => {
+                      const c = customers.find(x => x.name === val);
+                      if (c) handleSelectCustomer(c);
+                      else setFormCompany(val);
                     }}
-                    onFocus={() => setShowCompanySuggestions(true)}
-                    placeholder="Search or enter company name"
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5"
+                    placeholder="Search & select company..."
                     required
                   />
-                </label>
-                {showCompanySuggestions && companySuggestions.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 bg-white border border-slate-200 rounded-lg shadow-lg mt-1 z-50 max-h-32 overflow-y-auto">
-                    {companySuggestions.map((cust) => (
-                      <div
-                        key={cust.id}
-                        onClick={() => handleSelectCustomer(cust)}
-                        className="p-2 hover:bg-slate-50 cursor-pointer font-medium border-b border-slate-100 last:border-0"
-                      >
-                        {cust.name} ({cust.city})
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <label className="block font-semibold text-slate-700">
-                  Contact Person
+                  Contact Person {formVisitType === 'Sales' && <span className="text-rose-500">*</span>}
                   <input
                     value={formContact}
                     onChange={e => setFormContact(e.target.value)}
                     placeholder="Person name"
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5"
+                    className={`mt-1 w-full rounded-lg border border-slate-200 p-2.5 ${formVisitType !== 'Sales' ? 'bg-slate-100 text-slate-500' : 'bg-white'}`}
+                    required={formVisitType === 'Sales'}
+                    readOnly={formVisitType !== 'Sales'}
                   />
                 </label>
                 <label className="block font-semibold text-slate-700">
-                  Contact Phone Number
+                  Contact Phone Number {formVisitType === 'Sales' && <span className="text-rose-500">*</span>}
                   <input
                     value={formPhone}
                     onChange={e => setFormPhone(e.target.value)}
                     placeholder="Number"
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5"
+                    className={`mt-1 w-full rounded-lg border border-slate-200 p-2.5 ${formVisitType !== 'Sales' ? 'bg-slate-100 text-slate-500' : 'bg-white'}`}
+                    required={formVisitType === 'Sales'}
+                    readOnly={formVisitType !== 'Sales'}
                   />
                 </label>
               </div>
@@ -772,37 +1301,51 @@ export const VisitsPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <label className="block font-semibold text-slate-700">
                   City
-                  <select
-                    value={formCity}
-                    onChange={e => setFormCity(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5"
-                  >
-                    {cities.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
+                  {formVisitType === 'Sales' ? (
+                    <select
+                      value={formCity}
+                      onChange={e => setFormCity(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5"
+                    >
+                      {cities.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <SearchableSelect
+                      options={cities.map(c => ({ label: c, value: c }))}
+                      value={formCity}
+                      onChange={setFormCity}
+                      placeholder="Select city..."
+                      className="mt-1"
+                    />
+                  )}
                 </label>
 
                 <label className="block font-semibold text-slate-700">
                   Branch Name
-                  {/* Dropdown if existing customer branches exist, otherwise input text */}
-                  {formCompany && customers.find(c => c.name.toLowerCase() === formCompany.toLowerCase())?.branches?.length ? (
-                    <select
-                      value={formBranch}
-                      onChange={e => setFormBranch(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5"
-                    >
-                      <option value="">Select branch</option>
-                      {(customers.find(c => c.name.toLowerCase() === formCompany.toLowerCase())?.branches || []).map(b => (
-                        <option key={b} value={b}>{b}</option>
-                      ))}
-                    </select>
+                  {formVisitType === 'Sales' ? (
+                    <>
+                      <input
+                        list="branch-options"
+                        value={formBranch}
+                        onChange={e => handleBranchChange(e.target.value)}
+                        placeholder="e.g. GIDC Unit 2"
+                        className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5"
+                      />
+                      <datalist id="branch-options">
+                        {(customers.find(c => (c.name || "").toLowerCase() === (formCompany || "").toLowerCase())?.branches || []).map(b => (
+                          <option key={b} value={b} />
+                        ))}
+                      </datalist>
+                    </>
                   ) : (
-                    <input
+                    <SearchableSelect
+                      options={(customers.find(c => (c.name || "").toLowerCase() === (formCompany || "").toLowerCase())?.branches || []).map(b => ({ label: b, value: b }))}
                       value={formBranch}
-                      onChange={e => setFormBranch(e.target.value)}
-                      placeholder="e.g. GIDC Unit 2"
-                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5"
+                      onChange={handleBranchChange}
+                      placeholder="Select branch..."
+                      className="mt-1"
                     />
                   )}
                 </label>
@@ -814,23 +1357,117 @@ export const VisitsPage: React.FC = () => {
                   value={formAddress}
                   onChange={e => setFormAddress(e.target.value)}
                   placeholder="Address coordinates or landmark details..."
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5 h-12 resize-none"
+                  className={`mt-1 w-full rounded-lg border border-slate-200 p-2.5 h-12 resize-none ${formVisitType !== 'Sales' ? 'bg-slate-100 text-slate-500' : 'bg-white'}`}
+                  readOnly={formVisitType !== 'Sales'}
                 />
               </label>
+
+              {formVisitType !== 'Sales' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Select Order <span className="text-rose-500">*</span>
+                    </label>
+                    <SearchableSelect
+                      options={orders
+                        .filter(o => 
+                          (o.companyName || "").toLowerCase() === (formCompany || "").toLowerCase() &&
+                          (formVisitType === 'Service' ? o.status === "Commissioned/Completed" : true)
+                        )
+                        .map(o => {
+                          if (formVisitType === 'Service') {
+                            return {
+                              label: `${o.id} - ${getOrderLastServiceInfo(o.id)}`,
+                              value: o.id
+                            };
+                          } else {
+                            const rawDate = o.createdAt || o.deliveryDate;
+                            const formattedDate = rawDate ? new Date(rawDate).toLocaleDateString('en-IN') : 'N/A';
+                            return {
+                              label: `${o.id} - Date: ${formattedDate} - Status: ${o.status}`,
+                              value: o.id
+                            };
+                          }
+                        })}
+                      value={formOrderId}
+                      onChange={handleOrderSelectionChange}
+                      placeholder="Search & select an order..."
+                      required
+                    />
+                  </div>
+
+                  {formVisitType === 'Delivery' && (
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">
+                        Select Supplier <span className="text-rose-500">*</span>
+                      </label>
+                      <SearchableSelect
+                        options={suppliers.map(s => ({
+                          label: s.name,
+                          value: s.id,
+                          sublabel: s.city ? `City: ${s.city}` : undefined
+                        }))}
+                        value={formSupplierId}
+                        onChange={setFormSupplierId}
+                        placeholder="Search & select a supplier..."
+                        required
+                      />
+                    </div>
+                  )}
+                  
+                  {formOrderId && (() => {
+                    const order = orders.find(o => o.id === formOrderId);
+                    if (!order) return null;
+                    const rawDate = order.createdAt || order.deliveryDate;
+                    const formattedDate = rawDate ? new Date(rawDate).toLocaleDateString('en-IN') : 'N/A';
+                    return (
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-2">
+                        <div className="flex justify-between items-center border-b pb-2">
+                          <span className="font-semibold text-slate-700">Order Date: {formattedDate}</span>
+                          <span className="font-bold text-[#173c2d] uppercase">{order.status}</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold text-slate-600 block mb-1">Products:</span>
+                          <ul className="list-disc pl-4 space-y-0.5">
+                            {(order.productsSelected || []).map((p, i) => (
+                              <li key={i}>{p.productName} (x{p.quantity})</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 {currentUserRole === "Owner" ? (
                   <label className="block font-semibold text-slate-700">
-                    Assigned Salesperson
-                    <select
-                      value={formSalesperson}
-                      onChange={e => setFormSalesperson(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5"
-                    >
-                      {employees.filter(e => e.role === "Sales Person" || e.role === "Owner").map(emp => (
-                        <option key={emp.name} value={emp.name}>{emp.name}</option>
-                      ))}
-                    </select>
+                    Assigned {formVisitType === 'Delivery' || formVisitType === 'Commissioning' || formVisitType === 'Service' ? 'Engineer' : 'Salesperson'}
+                    {formVisitType === 'Sales' ? (
+                      <select
+                        value={formSalesperson}
+                        onChange={e => setFormSalesperson(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5"
+                      >
+                        <option value="">Select salesperson...</option>
+                        {employees
+                          .filter(e => e.role === "Sales Person" || e.role === "Owner")
+                          .map(emp => (
+                            <option key={emp.name} value={emp.name}>{emp.name}</option>
+                          ))}
+                      </select>
+                    ) : (
+                      <SearchableSelect
+                        options={employees
+                          .filter(e => e.role === (formVisitType === 'Delivery' || formVisitType === 'Commissioning' || formVisitType === 'Service' ? 'Service Engineer' : 'Sales Person'))
+                          .map(emp => ({ label: emp.name, value: emp.name }))}
+                        value={formSalesperson}
+                        onChange={setFormSalesperson}
+                        placeholder={`Select ${formVisitType === 'Delivery' || formVisitType === 'Commissioning' || formVisitType === 'Service' ? 'Engineer' : 'Salesperson'}...`}
+                        className="mt-1"
+                      />
+                    )}
                   </label>
                 ) : (
                   <div>
@@ -840,77 +1477,84 @@ export const VisitsPage: React.FC = () => {
                 )}
 
                 <label className="block font-semibold text-slate-700">
-                  Scheduled Date & Time
+                  Scheduled Date & Time <span className="text-rose-500">*</span>
                   <input
                     type="datetime-local"
                     value={formScheduledDate}
                     onChange={e => setFormScheduledDate(e.target.value)}
                     className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2"
+                    required
                   />
                 </label>
-              </div>
-
-              {/* Product Selection checkboxes with Steppers */}
-              <div className="space-y-1.5 pb-4">
-                <span className="block font-semibold text-slate-700">Interested Products Selection</span>
-                <select 
-                  className="w-full rounded-lg border border-slate-200 bg-white p-2.5 appearance-none cursor-pointer"
-                  onChange={(e) => {
-                    const pid = e.target.value;
-                    if (!pid) return;
-                    if (!selectedProducts.find(sp => sp.productId === pid)) {
-                      handleProductQuantityChange(pid, 1);
-                    }
-                    e.target.value = ""; 
-                  }}
-                  defaultValue=""
-                >
-                  <option value="" disabled>+ Select a Product to Add...</option>
-                  {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.model || 'Default'})</option>)}
-                </select>
-                
-                {selectedProducts.length > 0 && (
-                  <div className="border border-slate-200 rounded-lg p-2 mt-2 space-y-2 bg-slate-50/50 max-h-32 overflow-y-auto">
-                    {selectedProducts.map(sel => {
-                      const prod = products.find(p => p.id === sel.productId);
-                      if (!prod) return null;
-                      return (
-                        <div key={prod.id} className="flex items-center justify-between">
-                          <span className="font-medium text-slate-700 leading-tight mr-2">{prod.name}</span>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => handleProductQuantityChange(prod.id, -1)}
-                              className="w-5 h-5 rounded bg-slate-200 text-slate-750 flex items-center justify-center font-bold"
-                            >
-                              -
-                            </button>
-                            <span className="font-semibold w-5 text-center">{sel.quantity}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleProductQuantityChange(prod.id, 1)}
-                              className="w-5 h-5 rounded bg-slate-200 text-slate-750 flex items-center justify-center font-bold"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
 
               {!editingVisit && (
-                <label className="block font-semibold text-slate-700">
-                  Initial Log/Visit Notes
-                  <textarea
-                    value={formNotes}
-                    onChange={e => setFormNotes(e.target.value)}
-                    placeholder="Any initial instructions, context or notes for scheduling..."
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5 h-12 resize-none"
-                  />
-                </label>
+                <div className="space-y-2">
+                  <label className="block font-semibold text-slate-700">
+                    Initial Log/Visit Notes
+                    <textarea
+                      value={formNotes}
+                      onChange={e => setFormNotes(e.target.value)}
+                      placeholder="Any initial instructions, context or notes for scheduling..."
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5 h-12 resize-none"
+                    />
+                  </label>
+
+                  {formVisitType === 'Delivery' && (
+                    <>
+                      {(formLogPhoto || formLogVoice || isRecording) && (
+                        <div className="flex flex-wrap gap-2.5 border-t border-slate-100 pt-2">
+                          {formLogPhoto && (
+                            <div className="relative group rounded-lg overflow-hidden border bg-white p-1">
+                              <img src={formLogPhoto} alt="Outcome Photo" className="h-10 w-14 object-cover rounded" />
+                              <button onClick={() => setFormLogPhoto(null)} className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5">
+                                <X size={8} />
+                              </button>
+                            </div>
+                          )}
+                          {formLogVoice && (
+                            <div className="flex items-center gap-1.5 rounded-lg border bg-white px-2 py-1 text-[10px] text-slate-600">
+                              <span>{formLogVoice}</span>
+                              <button onClick={() => setFormLogVoice(null)} className="text-slate-400 hover:text-red-500">
+                                <X size={10} />
+                              </button>
+                            </div>
+                          )}
+                          {isRecording && (
+                            <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[10px] text-red-600 font-medium">
+                              <div className="h-1.5 w-1.5 rounded-full bg-red-650 animate-ping" />
+                              <span>Simulating Mic...</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      <div className="flex gap-2 text-slate-500">
+                        <button
+                          type="button"
+                          onClick={() => setFormLogPhoto("https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=300&q=80")}
+                          className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg font-semibold flex items-center justify-center gap-1 transition text-xs"
+                        >
+                          📷 Photo
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isRecording}
+                          onClick={() => {
+                            setIsRecording(true);
+                            setTimeout(() => {
+                              setIsRecording(false);
+                              setFormLogVoice("Voice Note (0:12s)");
+                            }, 3000);
+                          }}
+                          className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg font-semibold flex items-center justify-center gap-1 transition text-xs disabled:opacity-50"
+                        >
+                          🎤 Voice
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
 
               <div className="flex gap-2 pt-2.5 border-t">
@@ -941,10 +1585,7 @@ export const VisitsPage: React.FC = () => {
             <div className="flex items-center justify-between border-b pb-2">
               <h3 className="font-bold text-sm text-slate-800">Log Visit Outcome</h3>
               <button
-                onClick={() => {
-                  setIsLogModalOpen(false);
-                  setLogStatus("");
-                }}
+                onClick={closeLogModal}
                 className="text-slate-400 hover:text-slate-650"
               >
                 <X size={16} />
@@ -952,26 +1593,272 @@ export const VisitsPage: React.FC = () => {
             </div>
 
             <div className="space-y-3.5 text-xs">
-              <label className="block font-semibold text-slate-750">
-                Select Outcome Status <span className="text-rose-500">*</span>
-                <select
-                  value={logStatus}
-                  onChange={e => setLogStatus(e.target.value as Visit["status"])}
-                  className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5"
-                  required
-                >
-                  <option value="">-- Choose Status --</option>
-                  <option value="In communication">In communication</option>
-                  <option value="Unavailable">Unavailable</option>
-                  <option value="Postponed">Postponed</option>
-                  <option value="Disqualified">Disqualified</option>
-                  <option value="Convert to lead">Convert to lead</option>
-                  <option value="Lost">Lost</option>
-                </select>
-              </label>
+              {loggingVisitObj?.visitType === 'Delivery' && (
+                <div className="space-y-2 border-b pb-3">
+                  <span className="block font-bold text-slate-705">Order Delivery & Commissioning Options</span>
+                  <div className="space-y-2 mt-1.5">
+                    <label className="flex items-center gap-2 cursor-pointer text-slate-700 font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={deliveryCompleted}
+                        onChange={e => {
+                          setDeliveryCompleted(e.target.checked);
+                          if (!e.target.checked) {
+                            setCommissioningDone(false);
+                          }
+                        }}
+                        className="rounded border-slate-350 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                      />
+                      <span>Delivery Completed</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer text-slate-700 font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={commissioningDone}
+                        onChange={e => {
+                          setCommissioningDone(e.target.checked);
+                          if (e.target.checked) {
+                            setDeliveryCompleted(true);
+                          }
+                        }}
+                        className="rounded border-slate-355 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                      />
+                      <span>Commissioning Done</span>
+                    </label>
+
+                    {commissioningDone && (
+                      <div className="mt-2.5 p-2 bg-emerald-50/50 rounded-lg border border-emerald-100 space-y-1.5">
+                        <span className="block font-semibold text-[11px] text-emerald-805">Upload Commissioning Report</span>
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx,image/*"
+                          onChange={e => {
+                            const file = e.target.files?.[0] || null;
+                            setCommissioningReportFile(file);
+                          }}
+                          className="w-full text-xs text-slate-600 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border file:border-slate-300 file:bg-white file:text-slate-700 file:cursor-pointer hover:file:bg-slate-50"
+                        />
+                        {commissioningReportFile && (
+                          <p className="text-[10px] text-emerald-700 font-medium">Selected: {commissioningReportFile.name}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {loggingVisitObj?.visitType === 'Commissioning' && (
+                <div className="space-y-2 border-b pb-3">
+                  <span className="block font-bold text-slate-700">Commissioning Completion Option</span>
+                  <div className="space-y-2 mt-1.5">
+                    <label className="flex items-center gap-2 cursor-pointer text-slate-700 font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={commissioningDone}
+                        onChange={e => setCommissioningDone(e.target.checked)}
+                        className="rounded border-slate-355 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                      />
+                      <span>Commissioning Done</span>
+                    </label>
+
+                    {commissioningDone && (
+                      <div className="mt-2.5 p-2 bg-emerald-50/50 rounded-lg border border-emerald-100 space-y-1.5">
+                        <span className="block font-semibold text-[11px] text-emerald-805">Upload Commissioning Report</span>
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx,image/*"
+                          onChange={e => {
+                            const file = e.target.files?.[0] || null;
+                            setCommissioningReportFile(file);
+                          }}
+                          className="w-full text-xs text-slate-600 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border file:border-slate-300 file:bg-white file:text-slate-700 file:cursor-pointer hover:file:bg-slate-50"
+                        />
+                        {commissioningReportFile && (
+                          <p className="text-[10px] text-emerald-700 font-medium">Selected: {commissioningReportFile.name}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {loggingVisitObj?.visitType === 'Service' && (
+                <div className="space-y-2 border-b pb-3">
+                  <span className="block font-bold text-slate-700">Service Task Completion</span>
+                  <div className="space-y-2 mt-1.5">
+                    <label className="flex items-center gap-2 cursor-pointer text-slate-700 font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={serviceDone}
+                        onChange={e => setServiceDone(e.target.checked)}
+                        className="rounded border-slate-350 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                      />
+                      <span>Service Done</span>
+                    </label>
+
+                    {serviceDone && (
+                      <>
+                        {loggingVisitObj.serviceType === 'Major' ? (
+                          <div className="space-y-2 mt-2 bg-emerald-50/50 p-2.5 rounded-lg border border-emerald-100">
+                            <div>
+                              <label className="block font-semibold text-[11px] text-[#173c2d] font-bold">Pre-Service Report File Name</label>
+                              <input
+                                type="text"
+                                value={servicePreReportName}
+                                onChange={e => setServicePreReportName(e.target.value)}
+                                placeholder="e.g. pre-service-report.pdf"
+                                className="w-full rounded border border-slate-300 p-1.5 text-xs bg-white focus:ring-emerald-500 mt-1"
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="block font-semibold text-[11px] text-[#173c2d] font-bold">Post-Service Report File Name</label>
+                              <input
+                                type="text"
+                                value={servicePostReportName}
+                                onChange={e => setServicePostReportName(e.target.value)}
+                                placeholder="e.g. post-service-report.pdf"
+                                className="w-full rounded border border-slate-300 p-1.5 text-xs bg-white focus:ring-emerald-500 mt-1"
+                                required
+                              />
+                            </div>
+                            
+                            <div className="pt-2 border-t mt-2">
+                              <span className="block font-bold text-[11px] text-slate-700">Spare Parts Logged</span>
+                              <div className="flex gap-1.5 mt-1">
+                                <select
+                                  value={serviceSelectedPartId}
+                                  onChange={e => setServiceSelectedPartId(e.target.value)}
+                                  className="flex-1 rounded border border-slate-300 p-1 text-[11px] bg-white"
+                                >
+                                  <option value="">Select Spare Part...</option>
+                                  {inventory.map(item => (
+                                    <option key={item.id} value={item.id}>{item.name} (Stock: {item.quantity})</option>
+                                  ))}
+                                </select>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={serviceSelectedPartQty}
+                                  onChange={e => setServiceSelectedPartQty(e.target.value)}
+                                  className="w-12 rounded border border-slate-300 p-1 text-[11px] text-center"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (!serviceSelectedPartId) return;
+                                    const qty = Number(serviceSelectedPartQty);
+                                    const existingIdx = servicePartsUsed.findIndex(p => p.partId === serviceSelectedPartId);
+                                    if (existingIdx >= 0) {
+                                      const updated = [...servicePartsUsed];
+                                      updated[existingIdx].qty += qty;
+                                      setServicePartsUsed(updated);
+                                    } else {
+                                      setServicePartsUsed([...servicePartsUsed, { partId: serviceSelectedPartId, qty }]);
+                                    }
+                                    setServiceSelectedPartId("");
+                                    setServiceSelectedPartQty("1");
+                                  }}
+                                  className="bg-[#173c2d] hover:bg-[#204a3b] text-white px-2 py-1 rounded text-xs font-bold"
+                                >
+                                  Add
+                                </button>
+                              </div>
+                              
+                              {servicePartsUsed.length > 0 && (
+                                <div className="mt-2 space-y-1">
+                                  {servicePartsUsed.map(part => {
+                                    const invItem = inventory.find(i => i.id === part.partId);
+                                    return (
+                                      <div key={part.partId} className="flex justify-between items-center bg-white border border-slate-200 p-1.5 rounded text-[10px]">
+                                        <span className="font-semibold text-slate-700">{invItem?.name || part.partId}</span>
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-bold text-slate-900">Qty: {part.qty}</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => setServicePartsUsed(servicePartsUsed.filter(p => p.partId !== part.partId))}
+                                            className="text-red-500 hover:text-red-700 font-bold"
+                                          >
+                                            Remove
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5 mt-2 bg-emerald-50/50 p-2.5 rounded-lg border border-emerald-100">
+                            <label className="block font-semibold text-[11px] text-[#173c2d] font-bold">Checkup Report File Name</label>
+                            <input
+                              type="text"
+                              value={serviceCheckupReportName}
+                              onChange={e => setServiceCheckupReportName(e.target.value)}
+                              placeholder="e.g. checkup-report.pdf"
+                              className="w-full rounded border border-slate-300 p-1.5 text-xs bg-white focus:ring-emerald-500"
+                              required
+                            />
+                            
+                            <label className="flex items-center gap-1.5 mt-2 cursor-pointer text-slate-750 font-semibold">
+                              <input
+                                type="checkbox"
+                                checked={serviceIssueFound}
+                                onChange={e => setServiceIssueFound(e.target.checked)}
+                                className="rounded border-slate-350 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                              />
+                              <span>Machinery Issue Found?</span>
+                            </label>
+                            
+                            {serviceIssueFound && (
+                              <div className="mt-1.5 space-y-1">
+                                <label className="block font-semibold text-[10px] text-slate-500">Service Quotation File Name</label>
+                                <input
+                                  type="text"
+                                  value={serviceQuotationName}
+                                  onChange={e => setServiceQuotationName(e.target.value)}
+                                  placeholder="e.g. service-quotation.pdf"
+                                  className="w-full rounded border border-slate-300 p-1.5 text-xs bg-white focus:ring-emerald-500"
+                                  required
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {isSalesVisit ? (
+                <label className="block font-semibold text-slate-750">
+                  Select Outcome Status <span className="text-rose-500">*</span>
+                  <select
+                    value={logStatus}
+                    onChange={e => setLogStatus(e.target.value as Visit["status"])}
+                    className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5"
+                    required
+                  >
+                    <option value="">-- Choose Status --</option>
+                    <option value="In communication">In communication</option>
+                    <option value="Unavailable">Unavailable</option>
+                    <option value="Postponed">Postponed</option>
+                    <option value="Disqualified">Disqualified</option>
+                    <option value="Convert to lead">Convert to lead</option>
+                    <option value="Lost">Lost</option>
+                  </select>
+                </label>
+              ) : (
+                <div className="p-2 bg-slate-55 rounded-lg border border-slate-200 text-slate-600 font-semibold text-[11px]">
+                  This visit outcome will be logged and marked as <span className="text-emerald-700 font-bold">Completed</span>.
+                </div>
+              )}
 
               {/* Conditional Follow Up Date for Postponed */}
-              {logStatus === "Postponed" && (
+              {isSalesVisit && logStatus === "Postponed" && (
                 <label className="block font-semibold text-slate-750">
                   Follow-up Date & Time <span className="text-rose-500">*</span>
                   <input
@@ -985,7 +1872,7 @@ export const VisitsPage: React.FC = () => {
               )}
 
               {/* Notes block with Camera/Voice support */}
-              {logStatus !== "" && (
+              {(isSalesVisit ? logStatus !== "" : true) && (
                 <div className="space-y-2 border-t pt-2">
                   <label className="block font-semibold text-slate-750">
                     Notes / Reasons {["Unavailable", "Postponed", "Disqualified", "Lost"].includes(logStatus) && <span className="text-rose-500">*</span>}
@@ -1051,10 +1938,7 @@ export const VisitsPage: React.FC = () => {
 
             <div className="flex gap-2 pt-2 border-t">
               <Button
-                onClick={() => {
-                  setIsLogModalOpen(false);
-                  setLogStatus("");
-                }}
+                onClick={closeLogModal}
                 variant="outline"
                 className="flex-1 text-xs"
               >
@@ -1062,6 +1946,55 @@ export const VisitsPage: React.FC = () => {
               </Button>
               <Button onClick={handleSaveLogOutcome} className="flex-1 bg-[#173c2d] hover:bg-[#204a3b] text-xs">
                 Submit Outcome
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delivery Warning Modal */}
+      {showDeliveryWarning && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-sm rounded-xl bg-white shadow-xl animate-scaleUp p-5 space-y-4">
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="font-bold text-sm text-slate-800">Warning: Order Status Notice</h3>
+              <button
+                onClick={() => {
+                  setShowDeliveryWarning(false);
+                  setPendingVisitPayload(null);
+                }}
+                className="text-slate-400 hover:text-slate-650"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-700 leading-relaxed">
+              Current status is <span className="font-bold text-slate-900">{deliveryWarningStatus}</span>, are you sure you want to schedule <span className="font-bold text-slate-900">Delivery</span> visit?
+            </p>
+
+            <div className="flex gap-2 pt-2 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowDeliveryWarning(false);
+                  setPendingVisitPayload(null);
+                }}
+                className="flex-1 text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  if (pendingVisitPayload) {
+                    executeSaveVisit(pendingVisitPayload);
+                  }
+                }}
+                className="flex-1 bg-[#173c2d] hover:bg-[#204a3b] text-xs font-bold text-white"
+              >
+                Confirm Schedule
               </Button>
             </div>
           </div>

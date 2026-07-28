@@ -128,3 +128,21 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_date TIMESTAMPTZ;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS owner_reschedule_alert BOOLEAN DEFAULT FALSE;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS engineer_reschedule_alert BOOLEAN DEFAULT FALSE;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS engineer_assign_alert BOOLEAN DEFAULT FALSE;
+
+-- 18. Ensure visits table has visit_type, order_id and service_type columns
+ALTER TABLE visits ADD COLUMN IF NOT EXISTS visit_type VARCHAR(50) DEFAULT 'Sales';
+ALTER TABLE visits ADD COLUMN IF NOT EXISTS order_id VARCHAR(50) REFERENCES orders(id) ON DELETE SET NULL;
+ALTER TABLE visits ADD COLUMN IF NOT EXISTS service_type VARCHAR(50); -- 'Checkup' or 'Major'
+
+-- 19. Drop existing check constraint on visits table status to support 'Completed'
+ALTER TABLE visits DROP CONSTRAINT IF EXISTS visits_status_check;
+
+-- 20. Re-add check constraint to allow 'Completed' status
+ALTER TABLE visits ADD CONSTRAINT visits_status_check CHECK (
+  status IN ('Pending', 'Started', 'In communication', 'Unavailable', 'Postponed', 'Disqualified', 'Convert to lead', 'Lost', 'Completed')
+);
+
+-- 21. Add supplier_id and started_by columns to visits table
+ALTER TABLE visits ADD COLUMN IF NOT EXISTS supplier_id VARCHAR(50) REFERENCES supplier_master(id) ON DELETE SET NULL;
+ALTER TABLE visits ADD COLUMN IF NOT EXISTS started_by VARCHAR(150);
+
